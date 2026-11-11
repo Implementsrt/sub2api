@@ -67,13 +67,13 @@
       </div>
 
       <div class="card p-6">
-        <div class="flex flex-wrap items-end justify-between gap-4">
-          <div v-if="activeTab === 'errors'" class="flex flex-1 flex-wrap items-end gap-4">
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
+        <div class="space-y-4">
+          <div v-if="activeTab === 'errors'" class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] items-end gap-4">
+            <div class="min-w-0">
               <label class="input-label">{{ t('usage.errors.keyName') }}</label>
               <Select v-model="errorFilter.api_key_id" :options="errorKeyOptions" @change="applyErrorFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('usage.errors.model') }}</label>
               <Select
                 v-model="errorFilter.model"
@@ -85,47 +85,47 @@
                 @change="applyErrorFilters"
               />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[200px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('usage.errors.category') }}</label>
               <Select v-model="errorFilter.category" :options="errorCategoryOptions" @change="applyErrorFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[180px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('usage.errors.status') }}</label>
               <Select v-model="errorFilter.status_code" :options="errorStatusOptions" @change="applyErrorFilters" />
             </div>
           </div>
-          <div v-else class="flex flex-1 flex-wrap items-end gap-4">
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
+          <div v-else class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] items-end gap-4">
+            <div class="min-w-0">
               <label class="input-label">{{ t('usage.apiKeyFilter') }}</label>
               <Select v-model="filters.api_key_id" :options="apiKeyOptions" @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('usage.model') }}</label>
               <Select v-model="filters.model" :options="modelOptions" searchable @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[200px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('admin.usage.group') }}</label>
               <Select v-model="filters.group_id" :options="groupOptions" searchable @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[180px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('usage.type') }}</label>
               <Select v-model="filters.request_type" :options="requestTypeOptions" @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[180px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('usage.compactionFilter') }}</label>
               <Select v-model="filters.native_compaction_v2" :options="compactionOptions" @change="applyFilters" />
             </div>
-            <div v-if="subscriptionFeatureEnabled" class="w-full sm:w-auto sm:min-w-[200px]">
+            <div v-if="subscriptionFeatureEnabled" class="min-w-0">
               <label class="input-label">{{ t('admin.usage.billingType') }}</label>
               <Select v-model="filters.billing_type" :options="billingTypeOptions" @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[200px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('admin.usage.billingMode') }}</label>
               <Select v-model="filters.billing_mode" :options="billingModeOptions" @change="applyFilters" />
             </div>
           </div>
 
-          <div class="flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto">
+          <div class="flex flex-wrap items-center justify-end gap-3 border-t border-gray-100 pt-4 dark:border-dark-700/50">
             <button type="button" @click="refreshData" :disabled="activeTab === 'errors' ? errorLoading : loading" class="btn btn-secondary">
               {{ t('common.refresh') }}
             </button>
@@ -188,7 +188,13 @@
           default-sort-order="desc"
           @sort="handleSort"
           @ipGeoBatchFailed="handleIpGeoBatchFailed"
-        />
+        >
+          <template #cell-session_name="{ row }">
+            <span class="inline-block max-w-xs truncate align-middle text-sm" :title="row.session_name || personalLabels.noTitle">{{ row.session_name || '—' }}</span>
+          </template>
+          <template #cell-cache_hit_rate="{ row }"><CacheHitRateCell :row="row" /></template>
+          <template #cell-upstream_estimate="{ row }"><UpstreamEstimateCell :row="row" /></template>
+        </UsageTable>
 
         <Pagination
           v-if="pagination.total > 0"
@@ -222,6 +228,9 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
+import UpstreamEstimateCell from '@/extensions/upstreamPricing/UpstreamEstimateCell.vue'
+import { useUpstreamPricingLabels } from '@/extensions/upstreamPricing'
 import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
 import { keysAPI, usageAPI, userGroupsAPI } from '@/api'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -230,6 +239,8 @@ import Select, { type SelectOption } from '@/components/common/Select.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'
+import CacheHitRateCell from '@/extensions/personalUsage/CacheHitRateCell.vue'
+import { formatCacheHitRate, usePersonalUsageLabels, type PersonalUsageLog } from '@/extensions/personalUsage'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
@@ -257,12 +268,15 @@ import { COMMON_ERROR_STATUS_CODES } from '@/utils/errorBadges'
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const pricingAuthStore = useAuthStore()
+const upstreamPricingLabels = useUpstreamPricingLabels()
 
 type DistributionMetric = 'tokens' | 'actual_cost'
 type EndpointSource = 'inbound' | 'upstream' | 'path'
 
 const usageStats = ref<UsageStatsResponse | null>(null)
-const usageLogs = ref<UsageLog[]>([])
+const personalLabels = usePersonalUsageLabels()
+const usageLogs = ref<PersonalUsageLog[]>([])
 const trendData = ref<TrendDataPoint[]>([])
 const requestedModelStats = ref<ModelStat[]>([])
 const groupStats = ref<GroupStat[]>([])
@@ -661,7 +675,7 @@ const exportToCSV = async () => {
   exporting.value = true
   appStore.showInfo(t('usage.preparingExport'))
   try {
-    const allLogs: UsageLog[] = []
+    const allLogs: PersonalUsageLog[] = []
     const exportParams = buildUsageListParams(1, EXPORT_PAGE_SIZE)
     const totalPages = Math.ceil(pagination.total / EXPORT_PAGE_SIZE)
     for (let page = 1; page <= totalPages; page++) {
@@ -690,6 +704,11 @@ const exportToCSV = async () => {
       'Original Cost',
       'First Token (ms)',
       'Duration (ms)',
+      'Session ID',
+      'Session Name',
+      'Cache Hit Rate',
+      'Cache Drop (percentage points)',
+      ...(pricingAuthStore.isAdmin ? ['Estimated Upstream Cost (USD)', 'Upstream Cost Status', 'Upstream Price Version'] : []),
     ]
     const rows = allLogs.map((log) => [
       log.created_at,
@@ -709,6 +728,11 @@ const exportToCSV = async () => {
       log.total_cost.toFixed(8),
       log.first_token_ms ?? '',
       log.duration_ms ?? '',
+      log.session_id ?? '',
+      log.session_name ?? '',
+      formatCacheHitRate(log),
+      log.cache_drop?.drop_points ?? '',
+      ...(pricingAuthStore.isAdmin ? [log.upstream_estimate?.status === 'estimated' ? log.upstream_estimate.amount ?? '' : '', log.upstream_estimate?.status ?? 'unavailable', log.upstream_estimate?.version_id ?? ''] : []),
     ].map(escapeCSVValue))
     const csvContent = [
       headers.map(escapeCSVValue).join(','),
@@ -735,6 +759,7 @@ const DEFAULT_HIDDEN_COLUMNS = ['user_agent']
 const HIDDEN_COLUMNS_KEY = 'user-usage-hidden-columns'
 
 const allColumns = computed<Column[]>(() => [
+  { key: 'session_name', label: personalLabels.value.sessionName, sortable: false },
   { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
   { key: 'model', label: t('usage.model'), sortable: true },
   { key: 'reasoning_effort', label: t('usage.reasoningEffort'), sortable: false },
@@ -744,7 +769,9 @@ const allColumns = computed<Column[]>(() => [
   { key: 'stream', label: t('usage.type'), sortable: false },
   { key: 'billing_mode', label: t('admin.usage.billingMode'), sortable: false },
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
+  { key: 'cache_hit_rate', label: personalLabels.value.cacheHitRate, sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
+  ...(pricingAuthStore.isAdmin ? [{ key: 'upstream_estimate', label: upstreamPricingLabels.value.estimate, sortable: false }] : []),
   { key: 'latency', label: t('usage.latency'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },

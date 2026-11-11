@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/upstreampricing"
 )
 
 const (
@@ -211,6 +213,8 @@ type UsageLog struct {
 	VideoDurationSeconds *int
 
 	CreatedAt time.Time
+	// Fork-only transient snapshot; persisted in a separate pricing evidence table.
+	ForkUpstreamUsage *upstreampricing.Usage
 
 	User         *User
 	APIKey       *APIKey

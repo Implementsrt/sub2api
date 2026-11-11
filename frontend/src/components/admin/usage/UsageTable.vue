@@ -26,6 +26,10 @@
         :default-sort-order="defaultSortOrder"
         @sort="(key, order) => $emit('sort', key, order)"
       >
+        <!-- Fork extensions supply their own cells; keep upstream table behavior shared. -->
+        <template #cell-session_name="{ row }"><slot name="cell-session_name" :row="row" /></template>
+        <template #cell-cache_hit_rate="{ row }"><slot name="cell-cache_hit_rate" :row="row" /></template>
+        <template #cell-upstream_estimate="{ row }"><slot name="cell-upstream_estimate" :row="row" /></template>
         <template #cell-user="{ row }">
           <div class="text-sm">
             <button

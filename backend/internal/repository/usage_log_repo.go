@@ -8,6 +8,7 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/upstreampricing"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	gocache "github.com/patrickmn/go-cache"
 )
@@ -139,9 +140,10 @@ func appendUsageLogModelQueryFilter(query string, args []any, model string, sour
 }
 
 type usageLogRepository struct {
-	client *dbent.Client
-	sql    sqlExecutor
-	db     *sql.DB
+	forkUpstreamPricing *upstreampricing.Manager
+	client              *dbent.Client
+	sql                 sqlExecutor
+	db                  *sql.DB
 
 	createBatchOnce     sync.Once
 	createBatchCh       chan usageLogCreateRequest

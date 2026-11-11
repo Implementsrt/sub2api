@@ -1819,6 +1819,9 @@ export type ImageSizeSource = 'output' | 'input' | 'default' | 'legacy'
 export type ImageSizeBreakdown = Record<string, number>
 
 export interface UsageLog {
+  upstream_estimate?: import('@/extensions/upstreamPricing').UpstreamEstimate | null
+  // Persisted request identity, retained for session features without a table column.
+  session_id?: string | null
   id: number
   user_id: number
   api_key_id: number

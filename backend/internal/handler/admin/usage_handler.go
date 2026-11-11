@@ -213,7 +213,7 @@ func (h *UsageHandler) List(c *gin.Context) {
 		return
 	}
 
-	response.Paginated(c, adminUsageLogResponses(c, records), result.Total, page, pageSize)
+	response.Paginated(c, h.upstreamPricingRows(c, records), result.Total, page, pageSize)
 }
 
 // Stats handles getting usage statistics with filters

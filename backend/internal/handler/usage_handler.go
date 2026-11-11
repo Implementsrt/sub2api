@@ -252,10 +252,7 @@ func (h *UsageHandler) List(c *gin.Context) {
 		return
 	}
 
-	out := make([]dto.UsageLog, 0, len(records))
-	for i := range records {
-		out = append(out, *dto.UsageLogFromService(&records[i]).Localized(c.GetHeader("Accept-Language")))
-	}
+	out := h.personalUsageRows(c, records)
 	response.Paginated(c, out, result.Total, page, pageSize)
 }
 

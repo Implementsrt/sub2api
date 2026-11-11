@@ -14,7 +14,7 @@ vi.mock('@/stores/app', () => ({ useAppStore: () => appStoreMocks }))
 
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { nextTick } from 'vue'
+import { h, nextTick } from 'vue'
 
 import en from '@/i18n/locales/en/admin/resources'
 import zh from '@/i18n/locales/zh/admin/resources'
@@ -104,6 +104,8 @@ const DataTableStub = {
     <div>
       <div v-for="row in data" :key="row.request_id" :data-request-id="row.request_id">
         <slot name="cell-model" :row="row" :value="row.model" />
+        <slot name="cell-session_name" :row="row" />
+        <slot name="cell-cache_hit_rate" :row="row" />
         <slot name="cell-reasoning_effort" :row="row" :value="row.reasoning_effort" />
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
@@ -145,6 +147,20 @@ const baseImageRow = {
 }
 
 describe('admin UsageTable tooltip', () => {
+  it('forwards personal extension cells and their row data', () => {
+    const wrapper = mount(UsageTable, {
+      props: { data: [{ ...baseImageRow, session_name: 'Test session' }], columns: [] },
+      slots: {
+        'cell-session_name': ({ row }: any) => h('span', { 'data-testid': 'extension-name' }, row.session_name),
+        'cell-cache_hit_rate': ({ row }: any) => h('span', { 'data-testid': 'extension-rate' }, String(row.cache_read_tokens)),
+      },
+      global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
+    })
+    expect(wrapper.get('[data-testid="extension-name"]').text()).toBe('Test session')
+    expect(wrapper.get('[data-testid="extension-rate"]').text()).toBe('0')
+    wrapper.unmount()
+  })
+
   it('shows the two OpenAI cache-write buckets without Anthropic lifetime labels', async () => {
     const row = { ...baseImageRow, image_count: 0, billing_mode: 'token', cache_creation_tokens: 2399, cache_creation_30m_tokens: 9, cache_creation_12h_tokens: 2390 }
     const wrapper = mount(UsageTable, {

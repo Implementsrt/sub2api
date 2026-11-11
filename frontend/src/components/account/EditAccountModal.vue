@@ -5,8 +5,14 @@
     width="wide"
     @close="handleClose"
   >
+    <div v-if="account?.type === 'apikey'" class="mb-5 flex gap-2 border-b border-gray-200 pb-3 dark:border-dark-600">
+      <button type="button" class="btn" :class="forkPricingTab ? 'btn-secondary' : 'btn-primary'" @click="forkPricingTab = false">{{ upstreamPricingLabels.account }}</button>
+      <button type="button" class="btn" :class="forkPricingTab ? 'btn-primary' : 'btn-secondary'" @click="forkPricingTab = true">{{ upstreamPricingLabels.tab }}</button>
+    </div>
+    <UpstreamPricingPanel v-if="show && account?.type === 'apikey' && forkPricingTab" :key="account.id" :account-id="account.id" :default-base-url="String(account.credentials?.base_url || '')" />
     <form
       v-if="account"
+      v-show="!forkPricingTab"
       id="edit-account-form"
       @submit.prevent="handleSubmit"
       class="space-y-5"
@@ -3336,7 +3342,7 @@
     </form>
 
     <template #footer>
-      <div v-if="account" class="flex justify-end gap-3">
+      <div v-if="account && !forkPricingTab" class="flex justify-end gap-3">
         <button @click="handleClose" type="button" class="btn btn-secondary">
           {{ t('common.cancel') }}
         </button>
@@ -3390,6 +3396,8 @@
 import { ref, reactive, computed, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
+import UpstreamPricingPanel from '@/extensions/upstreamPricing/UpstreamPricingPanel.vue'
+import { useUpstreamPricingLabels } from '@/extensions/upstreamPricing'
 
 import { adminAPI } from '@/api/admin'
 import { useQuotaNotifyState } from '@/composables/useQuotaNotifyState'
@@ -3521,6 +3529,9 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const upstreamPricingLabels = useUpstreamPricingLabels()
+const forkPricingTab = ref(false)
+watch([() => props.show, () => props.account?.id], () => { forkPricingTab.value = false })
 const appStore = useAppStore()
 const browserTimeZone = getBrowserTimeZone()
 

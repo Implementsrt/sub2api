@@ -82,6 +82,7 @@ func providePluginHostInfo(buildInfo handler.BuildInfo) service.PluginHostInfo {
 }
 
 func provideCleanup(
+	upstreamPricing *service.UpstreamPricingService,
 	entClient *ent.Client,
 	rdb *redis.Client,
 	opsMetricsCollector *service.OpsMetricsCollector,
@@ -459,6 +460,9 @@ func provideCleanup(
 		}
 
 		runParallel(parallelSteps)
+		if upstreamPricing != nil {
+			upstreamPricing.Stop()
+		}
 		runSequential(infraSteps)
 
 		// Check if context timed out

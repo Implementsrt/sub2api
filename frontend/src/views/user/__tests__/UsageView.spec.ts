@@ -6,6 +6,9 @@ import Select, { type SelectOption } from '@/components/common/Select.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'
 
+const pricingAuth = vi.hoisted(() => ({ isAdmin: false }))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => pricingAuth }))
+
 const {
   query,
   getStats,
@@ -111,6 +114,7 @@ vi.mock('vue-i18n', async () => {
     ...actual,
     useI18n: () => ({
       t: (key: string) => messages[key] ?? key,
+      locale: { value: 'en' },
     }),
   }
 })
@@ -119,6 +123,8 @@ const simpleStub = { template: '<div><slot /></div>' }
 const chartStub = { template: '<div />' }
 
 const usageLog = {
+  session_id: 'session-export-id',
+  session_name: 'Session export title',
   id: 1,
   request_id: 'req-user-export',
   actual_cost: 0.092883,
@@ -173,6 +179,7 @@ function mountUsageView() {
 
 describe('user UsageView', () => {
   beforeEach(() => {
+    pricingAuth.isAdmin = false
     query.mockReset()
     getStats.mockReset()
     getDashboardModels.mockReset()
@@ -222,6 +229,10 @@ describe('user UsageView', () => {
     await flushPromises()
 
     expect(wrapper.findComponent(UsageTable).props('columns').map((column: { key: string }) => column.key)).toContain('latency')
+    const columnKeys = wrapper.findComponent(UsageTable).props('columns').map((column: { key: string }) => column.key)
+    expect(columnKeys).toEqual(expect.arrayContaining(['session_name', 'cache_hit_rate']))
+    expect(columnKeys).not.toContain('cache_monitoring')
+    expect(columnKeys).not.toContain('session_id')
     expect(query).toHaveBeenCalled()
     expect(getStats).toHaveBeenCalled()
     expect(getDashboardModels).toHaveBeenCalled()
@@ -233,6 +244,22 @@ describe('user UsageView', () => {
     expect(list).toHaveBeenCalledTimes(1)
     expect(list).toHaveBeenCalledWith(1, 100)
     expect(getAvailable).toHaveBeenCalled()
+  })
+
+  it('persists the optional session column without dropping the session identity', async () => {
+    localStorage.removeItem('user-usage-hidden-columns')
+    const wrapper = mountUsageView()
+    await flushPromises()
+    await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
+    await wrapper.get('[data-testid="usage-column-toggle-session_name"]').trigger('click')
+    expect(wrapper.findComponent(UsageTable).props('columns').map((column: { key: string }) => column.key)).not.toContain('session_name')
+    expect((wrapper.vm as any).usageLogs[0].session_id).toBe('session-export-id')
+    wrapper.unmount()
+    const restored = mountUsageView()
+    await flushPromises()
+    expect(restored.findComponent(UsageTable).props('columns').map((column: { key: string }) => column.key)).not.toContain('session_name')
+    restored.unmount()
+    localStorage.removeItem('user-usage-hidden-columns')
   })
 
   it('includes API keys after the first page in both record filters and queries by the selected key', async () => {
@@ -400,8 +427,8 @@ describe('user UsageView', () => {
     expect(showSuccess).toHaveBeenCalled()
     expect(csvContent.startsWith('\uFEFF')).toBe(true)
     expect(csvContent.slice(1)).toBe([
-      'Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms)',
-      '2026-03-08T00:00:00Z,demo-key,gpt-5.4,-,,203.0.113.10,Sync,Token,4057,101,278272,4,1,0.09288300,0.09288300,12,345',
+      'Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms),Session ID,Session Name,Cache Hit Rate,Cache Drop (percentage points)',
+      '2026-03-08T00:00:00Z,demo-key,gpt-5.4,-,,203.0.113.10,Sync,Token,4057,101,278272,4,1,0.09288300,0.09288300,12,345,session-export-id,Session export title,98.56%,',
     ].join('\n'))
     expect(csvContent).toContain('IP Address')
     expect(csvContent).toContain('203.0.113.10')
@@ -654,5 +681,17 @@ describe('UsageView subscription feature flag', () => {
     expect(billingTypeSelect(wrapper)).toBeUndefined()
     expect(wrapper.text()).not.toContain('Billing type')
     wrapper.unmount()
+  })
+
+  it('offers upstream cost only for an administrator viewing personal usage', async () => {
+    const regular = mountUsageView()
+    await flushPromises()
+    expect(regular.findComponent(UsageTable).props('columns').some((c: { key: string }) => c.key === 'upstream_estimate')).toBe(false)
+    regular.unmount()
+    pricingAuth.isAdmin = true
+    const admin = mountUsageView()
+    await flushPromises()
+    expect(admin.findComponent(UsageTable).props('columns').some((c: { key: string }) => c.key === 'upstream_estimate')).toBe(true)
+    admin.unmount()
   })
 })
