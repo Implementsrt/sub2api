@@ -13,6 +13,7 @@ func registerUpstreamPricingRoutes(admin *gin.RouterGroup, h *handler.Handlers) 
 	p := admin.Group("/upstream-pricing/accounts/:id")
 	v := h.Admin.UpstreamPricing
 	p.GET("", v.Get)
+	p.GET("/usage/:usageId/timing", v.Timing)
 	p.POST("/groups", v.Groups)
 	p.POST("/preview", v.Preview)
 	p.POST("/apply", v.Apply)

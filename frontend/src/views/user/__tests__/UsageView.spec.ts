@@ -686,7 +686,7 @@ describe('UsageView subscription feature flag', () => {
     wrapper.unmount()
   })
 
-  it('offers upstream cost only for an administrator viewing personal usage', async () => {
+  it('omits the upstream estimate column for both ordinary users and administrators', async () => {
     const regular = mountUsageView()
     await flushPromises()
     expect(regular.findComponent(UsageTable).props('columns').some((c: { key: string }) => c.key === 'upstream_estimate')).toBe(false)
@@ -694,7 +694,7 @@ describe('UsageView subscription feature flag', () => {
     pricingAuth.isAdmin = true
     const admin = mountUsageView()
     await flushPromises()
-    expect(admin.findComponent(UsageTable).props('columns').some((c: { key: string }) => c.key === 'upstream_estimate')).toBe(true)
+    expect(admin.findComponent(UsageTable).props('columns').some((c: { key: string }) => c.key === 'upstream_estimate')).toBe(false)
     admin.unmount()
   })
 })

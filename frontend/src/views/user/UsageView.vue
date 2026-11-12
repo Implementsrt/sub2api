@@ -193,7 +193,7 @@
             <span class="inline-block max-w-xs truncate align-middle text-sm" :title="row.session_name || personalLabels.noTitle">{{ row.session_name || '—' }}</span>
           </template>
           <template #cell-cache_hit_rate="{ row }"><CacheHitRateCell :row="row" /></template>
-          <template #cell-upstream_estimate="{ row }"><UpstreamEstimateCell :row="row" /></template>
+          <template #cell-latency="{ row }"><TimingComparisonCell :row="row" :allow-comparison="timingAuthStore.isAdmin" /></template>
         </UsageTable>
 
         <Pagination
@@ -228,9 +228,6 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
-import { useAuthStore } from '@/stores/auth'
-import UpstreamEstimateCell from '@/extensions/upstreamPricing/UpstreamEstimateCell.vue'
-import { useUpstreamPricingLabels } from '@/extensions/upstreamPricing'
 import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
 import { keysAPI, usageAPI, userGroupsAPI } from '@/api'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -240,6 +237,8 @@ import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'
 import CacheHitRateCell from '@/extensions/personalUsage/CacheHitRateCell.vue'
+import TimingComparisonCell from '@/extensions/personalUsage/TimingComparisonCell.vue'
+import { useAuthStore } from '@/stores/auth'
 import { formatCacheHitRate, usePersonalUsageLabels, type PersonalUsageLog } from '@/extensions/personalUsage'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'
@@ -268,8 +267,7 @@ import { COMMON_ERROR_STATUS_CODES } from '@/utils/errorBadges'
 
 const { t } = useI18n()
 const appStore = useAppStore()
-const pricingAuthStore = useAuthStore()
-const upstreamPricingLabels = useUpstreamPricingLabels()
+const timingAuthStore = useAuthStore()
 
 type DistributionMetric = 'tokens' | 'actual_cost'
 type EndpointSource = 'inbound' | 'upstream' | 'path'
@@ -707,7 +705,6 @@ const exportToCSV = async () => {
       'Session Name',
       'Cache Hit Rate',
       'Cache Drop (percentage points)',
-      ...(pricingAuthStore.isAdmin ? ['Estimated Upstream Cost (USD)', 'Upstream Cost Status', 'Upstream Price Version'] : []),
     ]
     const rows = allLogs.map((log) => [
       log.created_at,
@@ -731,7 +728,6 @@ const exportToCSV = async () => {
       log.session_name ?? '',
       formatCacheHitRate(log),
       log.cache_drop?.drop_points ?? '',
-      ...(pricingAuthStore.isAdmin ? [log.upstream_estimate?.status === 'estimated' ? log.upstream_estimate.amount ?? '' : '', log.upstream_estimate?.status ?? 'unavailable', log.upstream_estimate?.version_id ?? ''] : []),
     ].map(escapeCSVValue))
     const csvContent = [
       headers.map(escapeCSVValue).join(','),
@@ -770,7 +766,6 @@ const allColumns = computed<Column[]>(() => [
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
   { key: 'cache_hit_rate', label: personalLabels.value.cacheHitRate, sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
-  ...(pricingAuthStore.isAdmin ? [{ key: 'upstream_estimate', label: upstreamPricingLabels.value.estimate, sortable: false }] : []),
   { key: 'latency', label: t('usage.latency'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },

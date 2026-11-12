@@ -159,10 +159,23 @@
               </span>
             </summary>
             <div v-if="!sidebarCollapsed" class="mt-1 ml-4 border-l border-gray-200 pl-2 dark:border-dark-600">
-              <router-link v-for="item in systemSidebarItems.secondary" :key="item.path" :to="item.path" class="sidebar-link mb-0.5 py-1.5 text-sm" :class="{ 'sidebar-link-active': isActive(item.path) }" :id="item.path === '/admin/redeem' ? 'sidebar-wallet' : undefined" @click="handleMenuItemClick(item.path)">
-                <component :is="item.icon" class="h-4 w-4 flex-shrink-0" />
-                <span>{{ item.label }}</span>
-              </router-link>
+              <template v-for="item in systemSidebarItems.secondary" :key="item.path">
+                <details v-if="item.children?.length" class="mb-1">
+                  <summary class="sidebar-link cursor-pointer list-none py-1.5 text-sm [&::-webkit-details-marker]:hidden" :class="{ 'sidebar-link-active': isActive(item.path) }">
+                    <component :is="item.icon" class="h-4 w-4 flex-shrink-0" />
+                    <span>{{ item.label }}</span>
+                    <ChevronDownIcon class="ml-auto h-4 w-4" />
+                  </summary>
+                  <router-link v-for="child in item.children" :key="child.path" :to="child.path" class="sidebar-link ml-4 mb-0.5 py-1.5 text-sm" :class="{ 'sidebar-link-active': route.path === child.path }" @click="handleMenuItemClick(child.path)">
+                    <component :is="child.icon" class="h-4 w-4 flex-shrink-0" />
+                    <span>{{ child.label }}</span>
+                  </router-link>
+                </details>
+                <router-link v-else :to="item.path" class="sidebar-link mb-0.5 py-1.5 text-sm" :class="{ 'sidebar-link-active': isActive(item.path) }" :id="item.path === '/admin/redeem' ? 'sidebar-wallet' : undefined" @click="handleMenuItemClick(item.path)">
+                  <component :is="item.icon" class="h-4 w-4 flex-shrink-0" />
+                  <span>{{ item.label }}</span>
+                </router-link>
+              </template>
             </div>
           </details>
         </div>
@@ -774,6 +787,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
     items.push({ path: '/dashboard', label: t('nav.dashboard'), icon: DashboardIcon })
   }
   items.push(
+    ...(authStore.isAdmin ? [{ path: '/personal-site-notes', label: '个人站点说明', icon: PriceTagIcon }] : []),
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
     { path: '/batch-image', label: t('nav.batchImage'), icon: BatchImageIcon, hideInSimpleMode: true, featureFlag: flagBatchImageAccess },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },

@@ -139,7 +139,7 @@
               <span class="inline-block max-w-xs truncate align-middle text-sm" :title="row.session_name || personalLabels.noTitle">{{ row.session_name || '—' }}</span>
             </template>
             <template #cell-cache_hit_rate="{ row }"><CacheHitRateCell :row="row" /></template>
-            <template #cell-upstream_estimate="{ row }"><UpstreamEstimateCell :row="row" /></template>
+            <template #cell-latency="{ row }"><TimingComparisonCell :row="row" /></template>
           </UsageTable>
           <Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
         </div>
@@ -202,9 +202,8 @@ import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination fro
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'; import UsageExportProgress from '@/components/admin/usage/UsageExportProgress.vue'
 import CacheHitRateCell from '@/extensions/personalUsage/CacheHitRateCell.vue'
+import TimingComparisonCell from '@/extensions/personalUsage/TimingComparisonCell.vue'
 import { formatCacheHitRate, usePersonalUsageLabels, type PersonalAdminUsageLog } from '@/extensions/personalUsage'
-import UpstreamEstimateCell from '@/extensions/upstreamPricing/UpstreamEstimateCell.vue'
-import { useUpstreamPricingLabels } from '@/extensions/upstreamPricing'
 import UserTokenRanking from '@/components/admin/usage/UserTokenRanking.vue'
 import UsageCleanupDialog from '@/components/admin/usage/UsageCleanupDialog.vue'
 import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
@@ -639,7 +638,6 @@ const exportToExcel = async () => {
 // Column visibility
 const ALWAYS_VISIBLE = ['session_name', 'created_at']
 const personalLabels = usePersonalUsageLabels()
-const upstreamPricingLabels = useUpstreamPricingLabels()
 const DEFAULT_HIDDEN_COLUMNS = ['request_id', 'upstream_request_id', 'user_agent']
 const HIDDEN_COLUMNS_KEY = 'usage-hidden-columns'
 const HIDDEN_COLUMNS_VERSION_KEY = 'usage-hidden-columns-version'
@@ -661,7 +659,6 @@ const allColumns = computed(() => [
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
   { key: 'cache_hit_rate', label: personalLabels.value.cacheHitRate, sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
-  { key: 'upstream_estimate', label: upstreamPricingLabels.value.estimate, sortable: false },
   { key: 'latency', label: t('usage.latency'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'request_id', label: t('admin.usage.requestId'), sortable: false },

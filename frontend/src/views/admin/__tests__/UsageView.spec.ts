@@ -508,6 +508,8 @@ describe('admin UsageView request ID column visibility', () => {
     const columns = usageTable.props('columns') as { key: string }[]
     expect(columns[0].key).toBe('session_name')
     expect(columns.map(column => column.key)).toContain('cache_hit_rate')
+    expect(columns.map(column => column.key)).toContain('cost')
+    expect(columns.map(column => column.key)).not.toContain('upstream_estimate')
     expect(columns.map(column => column.key)).not.toContain('user')
     expect(usageTable.props('columns')).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ key: 'request_id' })]),

@@ -18,6 +18,12 @@ import { resolveRouteDocumentTitle } from './title'
  * Route definitions with lazy loading
  */
 const routes: RouteRecordRaw[] = [
+  {
+    path: '/personal-site-notes',
+    name: 'PersonalSiteNotes',
+    component: () => import('@/extensions/personalUsage/SiteNotesView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: '个人站点说明' },
+  },
   // ==================== Setup Routes ====================
   {
     path: '/setup',

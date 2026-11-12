@@ -239,6 +239,7 @@
 
         <!-- 合并首字/总耗时的健康度列：左侧色条上端随首字档、下端随总耗时档，中段(40%-60%)短渐变过渡，便于纵向扫视整体健康状况 -->
         <template #cell-latency="{ row }">
+          <slot name="cell-latency" :row="row">
           <div class="flex items-stretch gap-2">
             <span
               class="w-1 shrink-0 rounded-full"
@@ -257,6 +258,7 @@
               <span data-testid="output-tps" class="font-medium tabular-nums text-gray-700 dark:text-gray-300">{{ formatUsageOutputRate(row) }}</span>
             </div>
           </div>
+          </slot>
         </template>
 
         <template #cell-created_at="{ value }">
