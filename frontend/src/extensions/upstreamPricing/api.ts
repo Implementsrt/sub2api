@@ -1,8 +1,17 @@
 import { apiClient } from '@/api/client'
-import type { PricingConfig, PricingGroup, PricingState, Preview } from '.'
+import type { PricingConfig, PricingGroup, PricingState, Preview, PricingComparison, BrowserImportStart, BrowserImportStatus } from '.'
 
 const path = (id: number) => `/admin/upstream-pricing/accounts/${id}`
 export const upstreamPricingAPI = {
+  async comparison(params: { model: string; account_id: number; page: number; page_size: number }, signal?: AbortSignal) {
+    return (await apiClient.get<PricingComparison>('/admin/upstream-pricing/comparison', { params, signal })).data
+  },
+  async startImport(id: number, revision: number, config: PricingConfig, origin: string, signal?: AbortSignal) {
+    return (await apiClient.post<BrowserImportStart>(`${path(id)}/browser-imports`, { revision, config: { ...config, token: '', browser_import_id: '' }, origin }, { signal })).data
+  },
+  async importStatus(id: number, importId: string, signal?: AbortSignal) {
+    return (await apiClient.get<BrowserImportStatus>(`${path(id)}/browser-imports/${importId}`, { signal })).data
+  },
   async get(id: number, signal?: AbortSignal) { return (await apiClient.get<PricingState>(path(id), { signal })).data },
   async groups(id: number, revision: number, config: PricingConfig, signal?: AbortSignal) {
     return (await apiClient.post<PricingGroup[]>(`${path(id)}/groups`, { revision, config }, { signal, timeout: 65000 })).data

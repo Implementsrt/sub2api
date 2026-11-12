@@ -15,6 +15,8 @@
         <label class="space-y-1 text-sm"><span>{{ labels.token }}</span><input v-model="form.token" class="input" type="password" autocomplete="new-password" :placeholder="state?.source.has_credential ? labels.tokenSaved : ''" /></label>
       </div>
       <p class="text-xs text-gray-500">{{ labels.tokenHint }}</p>
+      <BrowserImportPanel :account-id="accountId" :revision="state?.source.revision || 0" :config="form" @imported="receiveImport" />
+      <p v-if="form.browser_import_id" role="status" class="text-sm text-green-700">面板凭证已验证并暂存，请在 5 分钟内预览价格；应用后加密保存。</p>
       <div class="flex items-end gap-3">
         <label class="flex-1 space-y-1 text-sm"><span>{{ labels.group }}</span>
           <select v-model="selectedGroup" class="input"><option value="">{{ labels.chooseGroup }}</option>
@@ -94,6 +96,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { upstreamPricingAPI } from './api'
+import BrowserImportPanel from './BrowserImportPanel.vue'
+import type { BrowserImportStatus } from '.'
 import { blankPrice, useUpstreamPricingLabels, type Catalog, type Price, type Preview, type PricingConfig, type PricingGroup, type PricingState } from '.'
 
 const props = defineProps<{ accountId: number; defaultBaseUrl?: string }>()
@@ -101,7 +105,7 @@ const labels = useUpstreamPricingLabels()
 const state = ref<PricingState | null>(null)
 const groups = ref<PricingGroup[]>([])
 const preview = ref<Preview | null>(null)
-const form = reactive<PricingConfig>({ provider: 'newapi', base_url: '', token: '', group: '', automatic: false, interval_minutes: 60, overrides: [] })
+const form = reactive<PricingConfig>({ provider: 'newapi', base_url: '', token: '', group: '', automatic: true, interval_minutes: 60, overrides: [] })
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
@@ -113,7 +117,7 @@ const controller = new AbortController()
 let alive = true
 const catalog = computed<Catalog | null>(() => preview.value?.catalog || state.value?.catalog || null)
 const matchingModels = computed(() => (catalog.value?.models || []).filter(p => p.model.toLowerCase().includes(search.value.toLowerCase())).slice(0, 100))
-const connection = () => JSON.stringify([form.provider, form.base_url, form.user_id || '', form.group, form.group_id || '', form.overrides || [], form.token || ''])
+const connection = () => JSON.stringify([form.provider, form.base_url, form.user_id || '', form.group, form.group_id || '', form.overrides || [], form.token || '', form.browser_import_id || ''])
 const dirty = computed(() => connection() !== baseline.value)
 const groupKey = (g: PricingGroup) => `${g.id || ''}:${g.name}`
 const selectedGroup = computed({ get: () => form.group ? groupKey({ id: form.group_id, name: form.group, multiplier: '' }) : '', set: (value: string) => {
@@ -137,6 +141,13 @@ function saveOverride() {
 }
 function removeOverride(model: string) { form.overrides = (form.overrides || []).filter(p => p.model !== model) }
 watch(form, () => { preview.value = null; notice.value = '' }, { deep: true, flush: 'sync' })
+watch(() => [form.provider, form.base_url, form.user_id, form.token], () => { form.browser_import_id = '' }, { flush: 'sync' })
+function receiveImport(value: BrowserImportStatus) {
+  form.token = ''; form.user_id = value.user_id
+  form.browser_import_id = value.id
+  groups.value = value.groups || []
+  if (!groups.value.some(g => g.name === form.group && (g.id || '') === (form.group_id || ''))) { form.group = ''; form.group_id = '' }
+}
 watch(() => [form.provider, form.base_url, form.user_id, form.group, form.group_id], () => {
   form.overrides = []
   clearEditor()
@@ -146,7 +157,7 @@ async function load() {
   const value = await upstreamPricingAPI.get(props.accountId, controller.signal)
   if (!alive) return
   state.value = value
-  Object.assign(form, { token: '', user_id: '', group_id: '', overrides: [] }, value.source.config)
+  Object.assign(form, { token: '', browser_import_id: '', user_id: '', group_id: '', overrides: [] }, value.source.config)
   form.token = ''
   if (!value.source.has_credential && !form.base_url) form.base_url = props.defaultBaseUrl || ''
   groups.value = form.group ? [{ name: form.group, id: form.group_id, multiplier: value.catalog?.group.multiplier || '' }] : []
@@ -173,5 +184,5 @@ function syncSaved() { return run(async () => { await upstreamPricingAPI.sync(pr
 function saveSchedule() { return run(async () => { await upstreamPricingAPI.schedule(props.accountId, form.automatic, form.interval_minutes, controller.signal); await load() }) }
 function rollback(version: number) { return run(async () => { const value = await upstreamPricingAPI.rollback(props.accountId, version, controller.signal); if (alive) preview.value = value }) }
 onMounted(() => { void run(load) })
-onBeforeUnmount(() => { alive = false; controller.abort(); form.token = '' })
+onBeforeUnmount(() => { alive = false; controller.abort(); form.token = ''; form.browser_import_id = '' })
 </script>

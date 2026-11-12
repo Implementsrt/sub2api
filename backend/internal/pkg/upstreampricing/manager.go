@@ -9,19 +9,20 @@ import (
 )
 
 type Manager struct {
-	Store  *Store
-	Remote *Remote
-	Cipher Cipher
-	ctx    context.Context
-	cancel context.CancelFunc
-	jobs   chan UsageJob
-	wg     sync.WaitGroup
-	once   sync.Once
+	Store   *Store
+	Remote  *Remote
+	Cipher  Cipher
+	Imports *BrowserImports
+	ctx     context.Context
+	cancel  context.CancelFunc
+	jobs    chan UsageJob
+	wg      sync.WaitGroup
+	once    sync.Once
 }
 
 func NewManager(store *Store, remote *Remote, cipher Cipher) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Manager{Store: store, Remote: remote, Cipher: cipher, ctx: ctx, cancel: cancel, jobs: make(chan UsageJob, 1024)}
+	return &Manager{Store: store, Remote: remote, Cipher: cipher, Imports: newBrowserImports(), ctx: ctx, cancel: cancel, jobs: make(chan UsageJob, 1024)}
 }
 
 func (m *Manager) Start() { m.once.Do(func() { m.wg.Add(2); go m.jobLoop(); go m.syncLoop() }) }
@@ -38,6 +39,17 @@ func (m *Manager) prepare(ctx context.Context, id int64, c Config) (Config, *Sou
 	fp, err := m.Store.AccountFingerprint(ctx, id)
 	if err != nil {
 		return c, nil, "", "", err
+	}
+	if c.Token == "" && c.BrowserImportID != "" {
+		var encrypted string
+		encrypted, err = m.Imports.resolve(c.BrowserImportID, id, src.Revision, fp, c)
+		if err != nil {
+			return c, nil, "", "", err
+		}
+		c.Token, err = m.Cipher.Decrypt(encrypted)
+		if err != nil {
+			return c, nil, "", "", safeError("无法解密暂存凭证，请重新连接")
+		}
 	}
 	if c.Token == "" && src.HasCredential {
 		if c.Provider != src.Config.Provider || c.BaseURL != src.Config.BaseURL || c.UserID != src.Config.UserID || fp != src.AccountFingerprint {
@@ -234,6 +246,7 @@ func (m *Manager) syncLoop() {
 		case <-m.ctx.Done():
 			return
 		case <-ticker.C:
+			m.Imports.Prune()
 			ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 			ids, err := m.Store.Due(ctx)
 			cancel()

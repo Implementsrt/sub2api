@@ -19,6 +19,7 @@ export interface PricingConfig {
   provider: 'newapi' | 'sub2api'
   base_url: string
   token?: string
+  browser_import_id?: string
   user_id?: string
   group: string
   group_id?: string
@@ -27,6 +28,18 @@ export interface PricingConfig {
   overrides?: Price[]
 }
 export interface PricingGroup { id?: string; name: string; multiplier: string }
+export interface ComparisonAccount {
+  id: number; name: string; provider: string; base_url: string; group: string; automatic: boolean
+  version_id: number | null; last_success: string | null; next_sync: string | null
+  stale: boolean; account_changed: boolean; last_error: string
+}
+export interface PricingComparison {
+  accounts: ComparisonAccount[]
+  items: { account_id: number; version_id: number; model: string; multiplier: string; base: Price; effective: Price }[]
+  total: number; page: number; page_size: number
+}
+export interface BrowserImportStart { id: string; ticket: string; expires_at: string }
+export interface BrowserImportStatus { id: string; status: 'waiting' | 'validating' | 'ready' | 'failed'; user_id: string; groups?: PricingGroup[]; error?: string }
 export interface Catalog {
   group: PricingGroup
   models: Price[]

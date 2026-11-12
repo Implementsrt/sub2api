@@ -19,6 +19,18 @@ import { resolveRouteDocumentTitle } from './title'
  */
 const routes: RouteRecordRaw[] = [
   {
+    path: '/admin/upstream-prices',
+    name: 'UpstreamPriceComparison',
+    component: () => import('@/extensions/upstreamPricing/ComparisonView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: '上游价格对比' },
+  },
+  {
+    path: '/pricing-browser-connect',
+    name: 'PricingBrowserConnect',
+    component: () => import('@/extensions/upstreamPricing/BrowserConnectView.vue'),
+    meta: { requiresAuth: false, title: '连接上游定价面板' },
+  },
+  {
     path: '/personal-site-notes',
     name: 'PersonalSiteNotes',
     component: () => import('@/extensions/personalUsage/SiteNotesView.vue'),
@@ -793,6 +805,7 @@ const BACKEND_MODE_CALLBACK_PATHS = [
 const BACKEND_MODE_PENDING_AUTH_PATHS = ['/register', '/email-verify']
 
 function isBackendModePublicRouteAllowed(path: string, hasPendingAuthSession: boolean): boolean {
+  if (path === '/pricing-browser-connect') return true
   if (BACKEND_MODE_ALLOWED_PATHS.some((allowedPath) => path === allowedPath || path.startsWith(allowedPath))) {
     return true
   }

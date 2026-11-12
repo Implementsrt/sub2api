@@ -17,6 +17,7 @@ type Config struct {
 	Provider        string  `json:"provider"`
 	BaseURL         string  `json:"base_url"`
 	Token           string  `json:"token,omitempty"`
+	BrowserImportID string  `json:"browser_import_id,omitempty"`
 	UserID          string  `json:"user_id,omitempty"`
 	Group           string  `json:"group"`
 	GroupID         string  `json:"group_id,omitempty"`

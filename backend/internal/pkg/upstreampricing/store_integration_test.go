@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
@@ -66,6 +68,7 @@ func TestUpstreamPricingStoreIntegration(t *testing.T) {
 	src, err := s.Source(ctx, id)
 	require.NoError(t, err)
 	require.Zero(t, src.Revision)
+	require.True(t, src.Config.Automatic, "new sources default to automatic sync")
 	c := Config{Provider: "newapi", BaseURL: "https://example.com", Group: "paid", IntervalMinutes: 60}
 	cat := fixtureCatalog()
 	require.NoError(t, finalize(&cat, nil))
@@ -81,6 +84,21 @@ func TestUpstreamPricingStoreIntegration(t *testing.T) {
 	public, _ := json.Marshal(src)
 	require.NotContains(t, string(public), "synthetic-encrypted-value")
 	require.Empty(t, src.Config.Token)
+	require.False(t, src.Config.Automatic, "an explicitly disabled source remains disabled")
+	_, err = db.ExecContext(ctx, `ALTER TABLE accounts ADD COLUMN name text NOT NULL DEFAULT 'Fixture account'`)
+	require.NoError(t, err)
+	comparison, err := s.Comparison(ctx, "mapped", 0, 1, 100)
+	require.NoError(t, err)
+	require.Equal(t, 1, comparison.Total)
+	require.Len(t, comparison.Items, 1)
+	require.Equal(t, "mapped", comparison.Items[0].Model)
+	require.Equal(t, version1, comparison.Items[0].VersionID)
+	require.False(t, comparison.Accounts[0].AccountChanged)
+	publicComparison, _ := json.Marshal(comparison)
+	require.NotContains(t, string(publicComparison), "synthetic-")
+	empty, err := s.Comparison(ctx, "mapped", id+1, 1, 100)
+	require.NoError(t, err)
+	require.Zero(t, empty.Total)
 	versions, err := s.Versions(ctx, id)
 	require.NoError(t, err)
 	oldStart := versions[0].EffectiveFrom
@@ -182,8 +200,54 @@ func TestUpstreamPricingStoreIntegration(t *testing.T) {
 	_, err = s.ApplyPreview(ctx, id, preview.ID)
 	require.ErrorIs(t, err, ErrConflict)
 	// All test state remains in the test schema, and stored configs contain no token.
+	comparison, err = s.Comparison(ctx, "mapped", id, 1, 100)
+	require.NoError(t, err)
+	require.True(t, comparison.Accounts[0].AccountChanged)
 	var configs string
 	err = db.QueryRowContext(ctx, `SELECT string_agg(config::text,'') FROM fork_upstream_pricing_sources`).Scan(&configs)
 	require.NoError(t, err)
 	require.False(t, strings.Contains(configs, "synthetic-encrypted-value"))
+
+	t.Run("browser imports verify and reuse credentials without saving configuration", func(t *testing.T) {
+		invalidate := false
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			require.Equal(t, "/api/user/self/groups", r.URL.Path)
+			require.Equal(t, "Bearer synthetic-panel", r.Header.Get("Authorization"))
+			require.Equal(t, "42", r.Header.Get("New-Api-User"))
+			if invalidate {
+				require.NoError(t, s.Schedule(ctx, id, true, 60))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"success":true,"data":{"paid":{"ratio":0.5}}}`))
+		}))
+		defer server.Close()
+		m := NewManager(s, NewRemote(""), timingTestCipher{})
+		defer m.Stop()
+		before, e := s.Source(ctx, id)
+		require.NoError(t, e)
+		candidate := Config{Provider: "newapi", BaseURL: server.URL, Group: "paid", Automatic: true, IntervalMinutes: 60}
+		start, e := m.StartBrowserImport(ctx, 1, id, before.Revision, "http://localhost:8080", candidate)
+		require.NoError(t, e)
+		require.NoError(t, m.CompleteBrowserImport(ctx, start.Ticket, "http://localhost:8080", "synthetic-panel", "42"))
+		require.Error(t, m.CompleteBrowserImport(ctx, start.Ticket, "http://localhost:8080", "synthetic-panel", "42"))
+		status, e := m.Imports.Status(start.ID, 1, id)
+		require.NoError(t, e)
+		require.Equal(t, "ready", status.Status)
+		require.Equal(t, "0.5", status.Groups[0].Multiplier)
+		candidate.BrowserImportID, candidate.UserID = start.ID, "42"
+		groups, e := m.Groups(ctx, id, candidate)
+		require.NoError(t, e)
+		require.Equal(t, "paid", groups[0].Name)
+		after, e := s.Source(ctx, id)
+		require.NoError(t, e)
+		require.Equal(t, before.Revision, after.Revision)
+		require.Equal(t, before.Config, after.Config)
+		invalidate = true
+		start, e = m.StartBrowserImport(ctx, 1, id, after.Revision, "http://localhost:8080", candidate)
+		require.NoError(t, e)
+		require.Error(t, m.CompleteBrowserImport(ctx, start.Ticket, "http://localhost:8080", "synthetic-panel", "42"))
+		status, e = m.Imports.Status(start.ID, 1, id)
+		require.NoError(t, e)
+		require.Equal(t, "failed", status.Status)
+	})
 }

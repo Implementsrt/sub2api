@@ -69,7 +69,7 @@ func randomToken() string {
 	return hex.EncodeToString(b[:])
 }
 func encoded(v any) []byte         { b, _ := json.Marshal(v); return b }
-func publicConfig(c Config) Config { c.Token = ""; return c }
+func publicConfig(c Config) Config { c.Token = ""; c.BrowserImportID = ""; return c }
 
 // Use the same selected-account snapshot at dispatch and when validating a source.
 // Never persist or return the actual inference credentials in pricing metadata.
@@ -114,7 +114,7 @@ func (s *Store) Source(ctx context.Context, id int64) (*Source, error) {
 	var b []byte
 	err := s.DB.QueryRowContext(ctx, `SELECT revision,config,credential,account_fingerprint,active_version,last_success,last_attempt,last_error,next_sync FROM fork_upstream_pricing_sources WHERE account_id=$1`, id).Scan(&v.Revision, &b, &v.Credential, &v.AccountFingerprint, &v.ActiveVersion, &v.LastSuccess, &v.LastAttempt, &v.LastError, &v.NextSync)
 	if errors.Is(err, sql.ErrNoRows) {
-		v.Config = Config{Provider: "newapi", IntervalMinutes: 60}
+		v.Config = Config{Provider: "newapi", Automatic: true, IntervalMinutes: 60}
 		return v, nil
 	}
 	if err != nil {
