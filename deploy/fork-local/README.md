@@ -2,6 +2,8 @@
 
 本 fork 的本机入口为根目录 `start-local.cmd` / `restart-local.cmd`。脚本版本受 Git 管理；`local-runtime/` 中的程序、凭证、配置、备份和日志全部忽略，不提交。
 
+桌面入口：执行 `powershell -NoProfile -ExecutionPolicy Bypass -File deploy/fork-local/create-shortcut.ps1`，创建 `Sub2API Restart` 快捷方式，直接指向本仓库的 `restart-local.cmd`，工作目录固定为仓库目录。Windows 不支持单独设置 cmd 文件图标，因此在快捷方式上使用 `sub2api.ico`；图标由原项目 `assets/logo.svg` 转换，包含 16/24/32/48/64/128/256 多种尺寸。已存在的同名快捷方式先备份到忽略的 `local-runtime/backups/shortcuts/`。只创建快捷方式，不启动或重启服务。
+
 ## 完成功能后
 
 1. 运行修改对应的测试与检查。
