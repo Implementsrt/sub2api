@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -205,4 +206,33 @@ func TestUpstreamPricingRemoteGroupsAndExactIdentity(t *testing.T) {
 	c.GroupID = "6"
 	_, err = r.Fetch(context.Background(), c)
 	require.Error(t, err)
+}
+
+func TestUpstreamPricingNewAPIAccessTokenMultiplier(t *testing.T) {
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "Bearer synthetic-panel-token", r.Header.Get("Authorization"))
+		require.Equal(t, "123", r.Header.Get("New-Api-User"))
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/user/self/groups":
+			fmt.Fprint(w, `{"success":true,"data":{"vip":{"ratio":0.15},"astra":{"ratio":0.27}}}`)
+		case "/api/pricing":
+			// The authenticated user rate wins over a public catalog rate.
+			fmt.Fprint(w, `{"success":true,"group_ratio":{"astra":9},"data":[{"model_name":"gpt","quota_type":0,"model_ratio":1,"completion_ratio":4,"enable_groups":["astra"]}]}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer site.Close()
+	remote := NewRemote("")
+	cfg := Config{Provider: "newapi", BaseURL: site.URL, Token: "synthetic-panel-token", UserID: "123", Group: "astra"}
+	groups, err := remote.Groups(context.Background(), cfg)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []Group{{Name: "vip", Multiplier: "0.15"}, {Name: "astra", Multiplier: "0.27"}}, groups)
+	cat, err := remote.Fetch(context.Background(), cfg)
+	require.NoError(t, err)
+	require.Equal(t, "0.27", cat.Group.Multiplier)
+	estimate := Calculate(cat, Usage{Model: "gpt", Input: 1000000})
+	require.Equal(t, "estimated", estimate.Status)
+	require.Equal(t, "0.54", *estimate.Amount)
 }

@@ -432,9 +432,8 @@ describe('admin UsageView distribution metric toggles', () => {
 
     expect(getSnapshotV2).toHaveBeenCalledTimes(1)
     const now = new Date()
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
     expect(getSnapshotV2).toHaveBeenCalledWith(expect.objectContaining({
-      start_date: formatLocalDate(yesterday),
+      start_date: formatLocalDate(now),
       end_date: formatLocalDate(now),
       granularity: 'hour'
     }))
@@ -506,6 +505,10 @@ describe('admin UsageView request ID column visibility', () => {
     await wrapper.vm.$nextTick()
 
     const usageTable = wrapper.findComponent(UsageTableStub)
+    const columns = usageTable.props('columns') as { key: string }[]
+    expect(columns[0].key).toBe('session_name')
+    expect(columns.map(column => column.key)).toContain('cache_hit_rate')
+    expect(columns.map(column => column.key)).not.toContain('user')
     expect(usageTable.props('columns')).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ key: 'request_id' })]),
     )
@@ -522,6 +525,9 @@ describe('admin UsageView request ID column visibility', () => {
       'usage-hidden-columns-version',
       'upstream-request-id-hidden-by-default',
     )
+    ;(wrapper.vm as any).onDateRangeChange({ startDate: '2026-01-01', endDate: '2026-01-02', preset: null })
+    ;(wrapper.vm as any).resetFilters()
+    expect((wrapper.vm as any).filters).toMatchObject({ start_date: formatLocalDate(new Date()), end_date: formatLocalDate(new Date()) })
   })
 
   it('keeps upstream ID hidden by default and allows enabling it from column settings', async () => {
@@ -745,6 +751,8 @@ describe('admin UsageView model audit export', () => {
 				id: 1,
 				created_at: '2026-08-04T00:00:00Z',
 				model: 'gpt-5.6-sol',
+				session_id: 'session-id',
+				session_name: 'Renamed session',
 				upstream_model: 'gpt-5.5',
 				upstream_response_model: 'gpt-5.4',
 				upstream_model_mismatch: true,
@@ -797,6 +805,8 @@ describe('admin UsageView model audit export', () => {
 		])
 		const row = sheetAddAoa.mock.calls[0][1][0]
 		expect(row.slice(4, 8)).toEqual(['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.4', 'Yes'])
+		expect(headers.slice(-4)).toEqual(['Session ID', 'Session name', 'Cache hit rate', 'Cache Drop (percentage points)'])
+		expect(row.slice(-4)).toEqual(['session-id', 'Renamed session', '0.00%', ''])
 		expect(saveAs).toHaveBeenCalledTimes(1)
 	})
 })

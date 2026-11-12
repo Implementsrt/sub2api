@@ -66,7 +66,8 @@ const messages = {
   zh: {
     tab: '上游定价', account: '账号设置', estimate: '上游预计扣费', provider: '站点类型', baseUrl: '面板地址',
     userId: 'New API 用户 ID', userIdHint: '部分站点需要，请填写面板中的用户 ID', token: '面板读取凭证',
-    tokenHint: '与模型调用 Key 分开；需要能读取用户分组的面板访问令牌。Sub2API 使用用户登录 JWT。',
+    tokenHint: 'New API 可使用面板访问令牌读取分组及用户专属倍率，部分站点还需要用户 ID；与模型调用 Key 分开。Sub2API 使用用户登录 JWT。',
+    probeHint: '账号设置中的倍率探测使用 Sub2API 专用接口；New API 请在“上游定价”中填写访问令牌并读取分组。读取的倍率用于上游预计扣费，不自动覆盖账号统计倍率。',
     tokenSaved: '已加密保存；留空保留。更换站点或账号身份后需要重新填写。',
     group: '上游计费分组', readGroups: '读取可用分组', chooseGroup: '请选择准确的计费分组', automatic: '自动同步',
     interval: '同步间隔', minutes: '分钟', preview: '预览价格差异', apply: '应用此预览', sync: '立即同步已保存配置',
@@ -88,7 +89,8 @@ const messages = {
   en: {
     tab: 'Upstream pricing', account: 'Account settings', estimate: 'Estimated upstream cost', provider: 'Site type', baseUrl: 'Panel URL',
     userId: 'New API user ID', userIdHint: 'Required by some sites; use the panel user ID', token: 'Panel access token',
-    tokenHint: 'Separate from the inference API key. It must read user groups. Sub2API requires a signed-in user JWT.',
+    tokenHint: 'New API panel access tokens can read groups and user-specific multipliers; some sites also require a user ID. Separate from the inference API key. Sub2API requires a user JWT.',
+    probeHint: 'The account multiplier probe uses a Sub2API-specific endpoint. For New API, enter a panel token under Upstream pricing and read groups. These multipliers estimate upstream costs without replacing account statistics multipliers.',
     tokenSaved: 'Stored encrypted; leave blank to keep. Enter again after changing the site or account identity.',
     group: 'Upstream billing group', readGroups: 'Read available groups', chooseGroup: 'Select the exact billing group', automatic: 'Automatic sync',
     interval: 'Sync interval', minutes: 'minutes', preview: 'Preview price changes', apply: 'Apply this preview', sync: 'Sync saved settings now',

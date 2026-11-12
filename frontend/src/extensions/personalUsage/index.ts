@@ -1,6 +1,6 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { UsageLog } from '@/types'
+import type { AdminUsageLog, UsageLog } from '@/types'
 
 export interface CacheDrop {
   previous_usage_id: number
@@ -19,6 +19,8 @@ export interface PersonalUsageLog extends UsageLog {
   cache_drop?: CacheDrop | null
   cache_monitoring_status?: 'ready' | 'unavailable'
 }
+
+export type PersonalAdminUsageLog = AdminUsageLog & PersonalUsageLog
 
 type CacheTokens = Pick<UsageLog, 'input_tokens' | 'cache_read_tokens' | 'cache_creation_tokens'>
 
@@ -47,7 +49,7 @@ export function cacheHitRateColor(row: CacheTokens): string {
 // Fork-only translations are co-located to avoid editing upstream locale trees.
 const messages = {
   zh: {
-    system: '系统', sessionName: '会话名称', cacheHitRate: '缓存命中率', cacheMonitoring: '掉缓存监测',
+    system: '系统', moreMenus: '更多菜单', sessionName: '会话名称', cacheHitRate: '缓存命中率', cacheMonitoring: '掉缓存监测',
     noTitle: '本机未找到会话名称', formula: '缓存读取 ÷（普通输入 + 缓存读取 + 缓存写入）',
     cacheDrop: '掉缓存', noSession: '无会话 ID', unavailable: '暂不可用',
     noDrop: '未检出',
@@ -55,7 +57,7 @@ const messages = {
     previous: '上次', current: '本次', drop: '下降', points: '个百分点', gap: '间隔', seconds: '秒', previousUsage: '上次用量记录',
   },
   en: {
-    system: 'System', sessionName: 'Session name', cacheHitRate: 'Cache hit rate', cacheMonitoring: 'Cache drop monitoring',
+    system: 'System', moreMenus: 'More menus', sessionName: 'Session name', cacheHitRate: 'Cache hit rate', cacheMonitoring: 'Cache drop monitoring',
     noTitle: 'No local session title found', formula: 'Cache read ÷ (uncached input + cache read + cache write)',
     cacheDrop: 'Cache drop', noSession: 'No session ID', unavailable: 'Unavailable', noDrop: 'Not detected',
     rule: 'Compare adjacent requests within 5 minutes in the same session, upstream account and model. Flag a drop of at least 20 percentage points with fewer cache reads. Skip overlapping, equal-time, insufficient-usage and compaction requests. Recorded usage alone cannot establish the cause.',
@@ -65,5 +67,5 @@ const messages = {
 
 export function usePersonalUsageLabels() {
   const { locale } = useI18n()
-  return computed(() => messages[locale.value.startsWith('zh') ? 'zh' : 'en'])
+  return computed(() => messages[locale?.value?.startsWith('zh') ? 'zh' : 'en'])
 }

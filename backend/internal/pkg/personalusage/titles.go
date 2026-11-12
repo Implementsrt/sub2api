@@ -11,8 +11,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
-	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -20,17 +18,10 @@ import (
 var uuidSession = regexp.MustCompile(`^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$`)
 
 // TitleResolver only reads title metadata on the server's local machine.
-// Cache entries include misses and expire to pick up new sessions and renames.
+// Each request reads current metadata so renames are visible on refresh.
 type TitleResolver struct {
-	mu         sync.Mutex
-	entries    map[string]titleEntry
 	CodexHome  string
 	ClaudeHome string
-}
-
-type titleEntry struct {
-	title   string
-	expires time.Time
 }
 
 func NewTitleResolver() *TitleResolver {
@@ -43,7 +34,7 @@ func NewTitleResolver() *TitleResolver {
 	if claudeHome == "" {
 		claudeHome = filepath.Join(home, ".claude")
 	}
-	return &TitleResolver{entries: make(map[string]titleEntry), CodexHome: codexHome, ClaudeHome: claudeHome}
+	return &TitleResolver{CodexHome: codexHome, ClaudeHome: claudeHome}
 }
 
 func cleanTitle(title string) string {
@@ -61,15 +52,6 @@ func cleanTitle(title string) string {
 }
 
 func (r *TitleResolver) Resolve(ctx context.Context, ids []string) map[string]string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	now := time.Now()
-	if r.entries == nil {
-		r.entries = make(map[string]titleEntry)
-	}
-	if len(r.entries) > 2048 {
-		clear(r.entries)
-	}
 	result, missing := make(map[string]string), make(map[string]bool)
 	for _, id := range ids {
 		// Local Codex/Claude sessions use UUIDs. Never interpolate arbitrary
@@ -77,11 +59,7 @@ func (r *TitleResolver) Resolve(ctx context.Context, ids []string) map[string]st
 		if !uuidSession.MatchString(id) {
 			continue
 		}
-		if cached, ok := r.entries[id]; ok && now.Before(cached.expires) {
-			result[id] = cached.title
-		} else {
-			missing[id] = true
-		}
+		missing[id] = true
 	}
 	if len(missing) == 0 {
 		return result
@@ -97,7 +75,6 @@ func (r *TitleResolver) Resolve(ctx context.Context, ids []string) map[string]st
 			titles[id] = r.readClaudeTitle(ctx, id)
 		}
 		title := cleanTitle(titles[id])
-		r.entries[id] = titleEntry{title, now.Add(10 * time.Second)}
 		result[id] = title
 	}
 	return result
@@ -156,7 +133,13 @@ func (r *TitleResolver) readCodexDB(ctx context.Context, ids map[string]bool, ti
 		args = append(args, id)
 		placeholders = append(placeholders, "?")
 	}
-	rows, err := db.QueryContext(ctx, "SELECT id, title FROM threads WHERE id IN ("+strings.Join(placeholders, ",")+")", args...)
+	where := " FROM threads WHERE id IN (" + strings.Join(placeholders, ",") + ")"
+	// Desktop renames are stored in name; title remains the original title.
+	rows, err := db.QueryContext(ctx, "SELECT id, COALESCE(NULLIF(trim(name), ''), title)"+where, args...)
+	if err != nil {
+		// Older Codex databases do not have a name column.
+		rows, err = db.QueryContext(ctx, "SELECT id, title"+where, args...)
+	}
 	if err != nil {
 		return
 	}

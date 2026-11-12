@@ -234,6 +234,9 @@ describe('user UsageView', () => {
     expect(columnKeys).not.toContain('cache_monitoring')
     expect(columnKeys).not.toContain('session_id')
     expect(query).toHaveBeenCalled()
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    expect(query).toHaveBeenCalledWith(expect.objectContaining({ start_date: today, end_date: today }), expect.anything())
     expect(getStats).toHaveBeenCalled()
     expect(getDashboardModels).toHaveBeenCalled()
     expect(getDashboardSnapshotV2).toHaveBeenCalledWith(expect.objectContaining({

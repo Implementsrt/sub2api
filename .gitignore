@@ -128,6 +128,12 @@ scripts
 #openspec/
 code-reviews/
 AGENTS.md
+!/AGENTS.md
+
+# Local entry points are public scripts; runtime/config/backups stay private.
+!/start-local.cmd
+!/restart-local.cmd
+/local-runtime/
 backend/cmd/server/server
 deploy/docker-compose.override.yml
 .gocache/

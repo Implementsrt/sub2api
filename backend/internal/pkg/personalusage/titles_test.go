@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func TestTitleResolver(t *testing.T) {
@@ -48,12 +47,23 @@ func TestTitleResolver(t *testing.T) {
 	if _, err := db.Exec("UPDATE threads SET title = ? WHERE id = ?", "Renamed", id); err != nil {
 		t.Fatal(err)
 	}
-	if r.Resolve(context.Background(), []string{id})[id] != "最新名称" {
-		t.Fatal("cache should be used")
-	}
-	r.entries[id] = titleEntry{expires: time.Now().Add(-time.Second)}
 	if r.Resolve(context.Background(), []string{id})[id] != "Renamed" {
-		t.Fatal("rename should refresh after expiry")
+		t.Fatal("rename should be visible immediately")
+	}
+	if _, err := db.Exec("ALTER TABLE threads ADD COLUMN name TEXT"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("UPDATE threads SET name = ? WHERE id = ?", "Desktop rename", id); err != nil {
+		t.Fatal(err)
+	}
+	if r.Resolve(context.Background(), []string{id})[id] != "Desktop rename" {
+		t.Fatal("desktop name must take precedence over original title")
+	}
+	if _, err := db.Exec("UPDATE threads SET name = ' ' WHERE id = ?", id); err != nil {
+		t.Fatal(err)
+	}
+	if r.Resolve(context.Background(), []string{id})[id] != "Renamed" {
+		t.Fatal("empty desktop name must fall back to title")
 	}
 }
 

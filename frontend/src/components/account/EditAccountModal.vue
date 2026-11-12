@@ -2266,6 +2266,7 @@
           <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
             {{ t('admin.accounts.upstreamBilling.autoProbeHint') }}
           </p>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ upstreamPricingLabels.probeHint }}</p>
         </div>
         <Toggle
           :model-value="upstreamBillingAutoProbeEnabled"

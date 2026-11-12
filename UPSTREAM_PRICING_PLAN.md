@@ -116,3 +116,5 @@
 - 226 项相关前端测试、TypeScript、ESLint、生产构建、后端回归与 PostgreSQL 隔离集成测试通过。数据库测试使用临时 schema 并清理，没有在当前服务 schema 应用新迁移。未进行浏览器视觉检查，也未向真实上游站点发送凭证。
 
 运行配置、实际计费规则和服务状态尚未变更；当前服务仍运行 personal.2。新程序在 `local-runtime/sub2api-personal.3.exe`，启用时需备份、替换程序并重启 Sub2API，首次启动自动执行新增侧表迁移。Codex 无需重启。
+
+2026-11-12 补充：personal.4 继续包含此功能并保持待启用状态。New API 使用面板访问令牌访问 `/api/user/self/groups`，站点需要时附带 `New-Api-User` 用户 ID；返回的用户专属分组倍率优先于公开价格目录的分组倍率，估算只乘一次。现有账号设置的自动倍率探测访问的是 Sub2API 专用 `/v1/sub2api/billing`，不支持 New API；请在“上游定价”页签读取 New API 分组与倍率，不要将面板访问令牌替换为账号的模型调用 Key。新回归测试使用本机模拟接口验证，无真实上游请求或凭证变动。

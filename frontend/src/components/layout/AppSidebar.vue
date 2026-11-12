@@ -42,7 +42,7 @@
           </div>
 
           <router-link
-            v-for="item in personalNavItems"
+            v-for="item in personalSidebarItems.primary"
             :key="item.path"
             :to="item.path"
             class="sidebar-link mb-1"
@@ -55,13 +55,33 @@
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
             <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
           </router-link>
+          <details v-if="personalSidebarItems.secondary.length" class="group mb-1" data-testid="personal-more-menus">
+            <summary
+              class="sidebar-link cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+              :class="{ 'sidebar-link-collapsed': sidebarCollapsed, 'sidebar-link-active': personalSidebarItems.secondary.some(item => isActive(item.path)) }"
+              :title="personalLabels.moreMenus"
+              @click="sidebarCollapsed && toggleSidebar()"
+            >
+              <FolderIcon class="h-5 w-5 flex-shrink-0" />
+              <span class="sidebar-label sidebar-label-flex flex-1" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
+                <span>{{ personalLabels.moreMenus }}</span>
+                <ChevronDownIcon class="h-4 w-4 flex-shrink-0 transition-transform duration-200 group-open:rotate-180" />
+              </span>
+            </summary>
+            <div v-if="!sidebarCollapsed" class="mt-1 ml-4 border-l border-gray-200 pl-2 dark:border-dark-600">
+              <router-link v-for="item in personalSidebarItems.secondary" :key="item.path" :to="item.path" class="sidebar-link mb-0.5 py-1.5 text-sm" :class="{ 'sidebar-link-active': isActive(item.path) }" @click="handleMenuItemClick(item.path)">
+                <component :is="item.icon" class="h-4 w-4 flex-shrink-0" />
+                <span>{{ item.label }}</span>
+              </router-link>
+            </div>
+          </details>
         </div>
         <!-- Admin Section -->
         <div class="sidebar-section">
           <div class="sidebar-section-title" :class="{ 'sidebar-section-title-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
             <span class="sidebar-section-title-text" :class="{ 'sidebar-section-title-text-collapsed': sidebarCollapsed }">{{ personalLabels.system }}</span>
           </div>
-          <template v-for="item in adminNavItems" :key="item.path">
+          <template v-for="item in systemSidebarItems.primary" :key="item.path">
             <!-- Collapsible group (has children) -->
             <template v-if="item.children?.length">
               <button
@@ -125,6 +145,26 @@
               <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
             </router-link>
           </template>
+          <details v-if="systemSidebarItems.secondary.length" class="group mb-1" data-testid="system-more-menus">
+            <summary
+              class="sidebar-link cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+              :class="{ 'sidebar-link-collapsed': sidebarCollapsed, 'sidebar-link-active': systemSidebarItems.secondary.some(item => isActive(item.path)) }"
+              :title="personalLabels.moreMenus"
+              @click="sidebarCollapsed && toggleSidebar()"
+            >
+              <FolderIcon class="h-5 w-5 flex-shrink-0" />
+              <span class="sidebar-label sidebar-label-flex flex-1" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
+                <span>{{ personalLabels.moreMenus }}</span>
+                <ChevronDownIcon class="h-4 w-4 flex-shrink-0 transition-transform duration-200 group-open:rotate-180" />
+              </span>
+            </summary>
+            <div v-if="!sidebarCollapsed" class="mt-1 ml-4 border-l border-gray-200 pl-2 dark:border-dark-600">
+              <router-link v-for="item in systemSidebarItems.secondary" :key="item.path" :to="item.path" class="sidebar-link mb-0.5 py-1.5 text-sm" :class="{ 'sidebar-link-active': isActive(item.path) }" :id="item.path === '/admin/redeem' ? 'sidebar-wallet' : undefined" @click="handleMenuItemClick(item.path)">
+                <component :is="item.icon" class="h-4 w-4 flex-shrink-0" />
+                <span>{{ item.label }}</span>
+              </router-link>
+            </div>
+          </details>
         </div>
 
       </template>
@@ -195,6 +235,7 @@ import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { usePersonalUsageLabels } from '@/extensions/personalUsage'
+import { personalSecondaryPaths, splitSidebarItems, systemSecondaryPaths } from '@/extensions/personalUsage/sidebar'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
 import VersionBadge from '@/components/common/VersionBadge.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -768,6 +809,7 @@ const userNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(tru
 // Admins access 可用渠道 from this section just like regular users — there is no
 // separate admin entry, since the page is purely a user-facing view.
 const personalNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(false)))
+const personalSidebarItems = computed(() => splitSidebarItems(personalNavItems.value, personalSecondaryPaths))
 
 // Custom menu items filtered by visibility
 const customMenuItemsForUser = computed(() => {
@@ -786,6 +828,7 @@ const customMenuItemsForAdmin = computed(() => {
 // Admin navigation items
 const adminNavItems = computed((): NavItem[] => {
   const baseItems: NavItem[] = [
+    { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon },
     { path: '/admin/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
     { path: '/admin/ops', label: t('nav.ops'), icon: ChartIcon, featureFlag: flagOpsMonitoring },
     { path: '/admin/users', label: t('nav.users'), icon: UsersIcon, hideInSimpleMode: true },
@@ -846,7 +889,6 @@ const adminNavItems = computed((): NavItem[] => {
         { path: '/admin/orders/plans', label: t('nav.paymentPlans'), icon: CreditCardIcon },
       ],
     },
-    { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon },
     { path: '/admin/audit-logs', label: t('nav.auditLogs'), icon: ShieldIcon, hideInSimpleMode: true }
   ]
 
@@ -870,6 +912,8 @@ const adminNavItems = computed((): NavItem[] => {
   }
   return visible
 })
+
+const systemSidebarItems = computed(() => splitSidebarItems(adminNavItems.value, systemSecondaryPaths))
 
 function toggleSidebar() {
   appStore.toggleSidebar()
