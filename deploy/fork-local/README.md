@@ -28,8 +28,16 @@
 
 `powershell -NoProfile -ExecutionPolicy Bypass -File deploy/fork-local/restart.ps1 -Check` 只检查当前程序、发布产物及待执行迁移，不停止服务、不运行数据库迁移。
 
-发布脚本测试：`powershell -NoProfile -ExecutionPolicy Bypass -File deploy/fork-local/test-release.ps1 -Candidate local-runtime/sub2api-personal.5.exe -Version 0.2.21-personal.5`。
+发布脚本测试：从 `local-runtime/latest-build.json` 取得当前发布程序路径和版本，传给 `test-release.ps1 -Candidate ... -Version ...`。不要依赖可能已清理的旧版散落 exe。
 
-重启流程测试：`powershell -NoProfile -ExecutionPolicy Bypass -File deploy/fork-local/test-restart.ps1 -Candidate local-runtime/sub2api-personal.5.exe -Version 0.2.21-personal.5 -OldExecutable local-runtime/sub2api-personal.2.exe`。使用模拟进程、网络和数据库验证升级成功、备份失败、无迁移启动失败回退、有迁移启动失败停止四种情况，不启动任何服务。
+重启流程测试：使用当前发布路径及版本运行 `test-restart.ps1 -Candidate ... -Version ... -OldExecutable local-runtime/sub2api.exe`。使用模拟进程、网络和数据库验证升级成功、备份失败、无迁移启动失败回退、有迁移启动失败停止四种情况，不启动任何服务。
 
 数据库 helper 测试：`python deploy/fork-local/test_database.py`。测试数据库命令使用模拟环境，不改动真实数据库。测试夹具保留于忽略的 `local-runtime/release-checks/`。上述测试命令中的候选程序及版本需随实际构建调整。
+
+## 构建产物保留策略
+
+成功发布后自动运行保留策略，默认保留 3 份发布产物（包含最新待启用版本及与已安装程序相同的版本，其他名额保留最近发布）。任何正在运行的程序都受保护；受保护版本超过 3 份时优先保留。多余发布目录、中间构建副本和旧版 `sub2api-custom.exe` / `sub2api-personal.N.exe` 移入 Windows 回收站，可从系统回收站恢复；不再生成一份清理归档。回收站占用由 Windows 管理，永久释放磁盘空间需清空回收站。
+
+构建持有独占 `build.lock`，发布与重启共享 `update.lock`。直接发布只回收本次已发布的中间副本；完整构建成功后仍持有构建锁，可一并回收历史中间副本。单独清理也按相同顺序取得两把锁。清理不修改待启用清单、不切换程序，异常或被占用文件保留，不影响已经成功的发布。只处理命名符合规则的产物，拒绝越界路径及符号链接/目录联接；遇到未知内容保留。不会自动清理数据库、配置、日志、升级备份、原始安装包及测试夹具。
+
+预览：`powershell -NoProfile -ExecutionPolicy Bypass -File deploy/fork-local/cleanup.ps1 -DryRun`；执行时去掉 `-DryRun`，可用 `-KeepReleases 3` 调整（2–10）。清理策略测试：`powershell -NoProfile -ExecutionPolicy Bypass -File deploy/fork-local/test-retention.ps1`，仅移动合成测试文件，不操作真实版本或系统回收站。仅调整维护脚本时不重新编译或递增应用版本。

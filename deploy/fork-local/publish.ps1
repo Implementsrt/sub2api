@@ -35,6 +35,13 @@ try {
         [IO.File]::Move($temporary, $pending)
     }
     Write-Host "Build $Version is ready. restart-local.cmd will activate it."
+    try {
+        . (Join-Path $PSScriptRoot 'retention.ps1')
+        $retention = Invoke-BuildRetention -RuntimePath $RuntimePath -PublishedCandidate $Candidate
+        Write-Host "Build retention: $($retention.retained_releases) releases kept; $($retention.recycled_artifacts) artifacts moved to Recycle Bin."
+    } catch {
+        Write-Warning 'Build is published; automatic cleanup skipped. Run cleanup.ps1 later.'
+    }
 } finally {
     if ($lock) { $lock.Dispose() }
 }

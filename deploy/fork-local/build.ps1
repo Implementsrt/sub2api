@@ -20,25 +20,39 @@ $commit = (& git -C $repoPath rev-parse --short HEAD | Out-String).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot determine source commit.' }
 if (& git -C $repoPath status --porcelain --untracked-files=normal) { $commit += '-dirty' }
 New-Item -ItemType Directory -Path (Join-Path $RuntimePath 'builds') -Force | Out-Null
-$candidatePath = Join-Path $RuntimePath "builds\sub2api-$Version-$([Guid]::NewGuid().ToString('N')).exe"
-Push-Location (Join-Path $repoPath 'frontend')
+$buildLock = [IO.File]::Open((Join-Path $RuntimePath 'build.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
 try {
-    & node node_modules/vitest/vitest.mjs run src/i18n/__tests__/localeKeyCompleteness.spec.ts
-    if ($LASTEXITCODE -ne 0) { throw 'Frontend locale checks failed.' }
-    & node node_modules/vue-tsc/bin/vue-tsc.js -b
-    if ($LASTEXITCODE -ne 0) { throw 'Frontend type check failed.' }
-    & node node_modules/vite/bin/vite.js build
-    if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
-} finally { Pop-Location }
-$previousCGO = $env:CGO_ENABLED
-Push-Location (Join-Path $repoPath 'backend')
-try {
-    $env:CGO_ENABLED = '0'
-    $buildTime = [DateTimeOffset]::Now.ToString('yyyy-MM-ddTHH:mm:sszzz')
-    & $GoExe build -tags embed -trimpath -ldflags "-s -w -X main.Version=$Version -X main.Commit=$commit -X main.Date=$buildTime" -o $candidatePath ./cmd/server
-    if ($LASTEXITCODE -ne 0) { throw 'Backend build failed; previous pending release is unchanged.' }
-} finally {
-    $env:CGO_ENABLED = $previousCGO
-    Pop-Location
-}
-& (Join-Path $PSScriptRoot 'publish.ps1') -Candidate $candidatePath -Version $Version -RuntimePath $RuntimePath
+    $candidatePath = Join-Path $RuntimePath "builds\sub2api-$Version-$([Guid]::NewGuid().ToString('N')).exe"
+    Push-Location (Join-Path $repoPath 'frontend')
+    try {
+        & node node_modules/vitest/vitest.mjs run src/i18n/__tests__/localeKeyCompleteness.spec.ts
+        if ($LASTEXITCODE -ne 0) { throw 'Frontend locale checks failed.' }
+        & node node_modules/vue-tsc/bin/vue-tsc.js -b
+        if ($LASTEXITCODE -ne 0) { throw 'Frontend type check failed.' }
+        & node node_modules/vite/bin/vite.js build
+        if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
+    } finally { Pop-Location }
+    $previousCGO = $env:CGO_ENABLED
+    Push-Location (Join-Path $repoPath 'backend')
+    try {
+        $env:CGO_ENABLED = '0'
+        $buildTime = [DateTimeOffset]::Now.ToString('yyyy-MM-ddTHH:mm:sszzz')
+        & $GoExe build -tags embed -trimpath -ldflags "-s -w -X main.Version=$Version -X main.Commit=$commit -X main.Date=$buildTime" -o $candidatePath ./cmd/server
+        if ($LASTEXITCODE -ne 0) { throw 'Backend build failed; previous pending release is unchanged.' }
+    } finally {
+        $env:CGO_ENABLED = $previousCGO
+        Pop-Location
+    }
+    & (Join-Path $PSScriptRoot 'publish.ps1') -Candidate $candidatePath -Version $Version -RuntimePath $RuntimePath
+    # We still own build.lock, so abandoned intermediate outputs can also be reclaimed.
+    $retentionLock = $null
+    try {
+        $retentionLock = [IO.File]::Open((Join-Path $RuntimePath 'update.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+        . (Join-Path $PSScriptRoot 'retention.ps1')
+        $null = Invoke-BuildRetention -RuntimePath $RuntimePath -CleanBuilds
+    } catch {
+        Write-Warning 'Build is published; intermediate cleanup skipped. Run cleanup.ps1 later.'
+    } finally {
+        if ($retentionLock) { $retentionLock.Dispose() }
+    }
+} finally { $buildLock.Dispose() }
