@@ -807,8 +807,10 @@ describe('admin UsageView model audit export', () => {
 		])
 		const row = sheetAddAoa.mock.calls[0][1][0]
 		expect(row.slice(4, 8)).toEqual(['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.4', 'Yes'])
-		expect(headers.slice(-4)).toEqual(['Session ID', 'Session name', 'Cache hit rate', 'Cache Drop (percentage points)'])
-		expect(row.slice(-4)).toEqual(['session-id', 'Renamed session', '0.00%', ''])
+		expect(headers.slice(-9, -5)).toEqual(['Session ID', 'Session name', 'Cache hit rate', 'Cache Drop (percentage points)'])
+		expect(row.slice(-9, -5)).toEqual(['session-id', 'Renamed session', '0.00%', ''])
+expect(headers.slice(-5)).toEqual(['Thread ID', 'Parent Thread ID', 'Request Kind', 'Subagent', 'Session Match'])
+expect(row.slice(-5)).toEqual(['', '', '', '', 'session_only'])
 		expect(saveAs).toHaveBeenCalledTimes(1)
 	})
 })

@@ -14,7 +14,9 @@ import CacheMonitoringCell from './CacheMonitoringCell.vue'
 const props = defineProps<{ row: PersonalUsageLog }>()
 const labels = usePersonalUsageLabels()
 const rateTitle = computed(() => {
-  const status = !props.row.session_id ? labels.value.noSession
+  const status = props.row.cache_monitoring_status === 'identity_missing' ? labels.value.identityMissing
+    : props.row.cache_monitoring_status === 'not_comparable' ? labels.value.notComparable
+    : !props.row.session_id && !props.row.session_identity?.thread_id ? labels.value.noSession
     : props.row.cache_monitoring_status !== 'ready' ? labels.value.unavailable : labels.value.noDrop
   return `${labels.value.formula}\n${props.row.cache_drop ? labels.value.rule : `${status}\n${labels.value.rule}`}`
 })

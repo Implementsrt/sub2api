@@ -81,3 +81,38 @@ func TestTitleResolverFallbackAndSanitization(t *testing.T) {
 		t.Fatal("control characters must be sanitized")
 	}
 }
+
+func TestTitleResolverAgentMetadata(t *testing.T) {
+	home := t.TempDir()
+	db, err := sql.Open("sqlite", filepath.Join(home, "state_5.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	_, err = db.Exec(`CREATE TABLE threads(id text PRIMARY KEY,name text,title text,source text,agent_nickname text,agent_path text)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+	child := "bbbbbbbb-bbbb-cccc-dddd-eeeeeeeeeeee"
+	guardian := "cccccccc-bbbb-cccc-dddd-eeeeeeeeeeee"
+	_, err = db.Exec(`INSERT INTO threads VALUES(?,NULL,'private delegated prompt',?,NULL,NULL),(?,NULL,'private review input',?,NULL,NULL)`, child, `{"subagent":{"thread_spawn":{"parent_thread_id":"`+parent+`","agent_nickname":"Pascal","agent_path":"/root/audit"}}}`, guardian, `{"subagent":{"other":"guardian"}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &TitleResolver{CodexHome: home, ClaudeHome: home}
+	info := r.ResolveDetails(context.Background(), []string{child, guardian})
+	if info[child].Name != "Pascal · audit" || info[child].Kind != "subagent" || info[child].ParentThreadID != parent {
+		t.Fatalf("unexpected child metadata: %#v", info[child])
+	}
+	if info[guardian].Name != "guardian" || info[guardian].Kind != "guardian" || info[guardian].ParentThreadID != "" {
+		t.Fatalf("unexpected review metadata: %#v", info[guardian])
+	}
+	_, err = db.Exec(`UPDATE threads SET name='Renamed child' WHERE id=?`, child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Resolve(context.Background(), []string{child})[child] != "Renamed child" {
+		t.Fatal("subagent rename was ignored")
+	}
+}

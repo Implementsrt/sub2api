@@ -21,16 +21,18 @@ func TestPersonalUsageContextIsolation(t *testing.T) {
 	_, err = repo.ListPersonalUsageContext(context.Background(), 42, []service.UsageLog{
 		{ID: 1, UserID: 42, SessionID: &session},
 		{ID: 2, UserID: 99, SessionID: &session}, // Caller cannot inject another user's records.
-		{ID: 3, UserID: 42},
+		{ID: 3, UserID: 99},
 	})
 	require.NoError(t, err)
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.Contains(t, captured, "created_at = t.created_at")
 	require.Contains(t, captured, "FETCH FIRST 1 ROW WITH TIES")
 	require.Contains(t, captured, "INTERVAL '5 minutes'")
+	require.Contains(t, captured, "scope_key = t.scope_key")
+	require.Contains(t, captured, "api_key_id = t.api_key_id")
 	require.Equal(t, 4, strings.Count(captured, "user_id = $1"))
 	// A missing identity does not cause an unbounded database query.
-	_, err = repo.ListPersonalUsageContext(context.Background(), 42, []service.UsageLog{{ID: 3, UserID: 42}})
+	_, err = repo.ListPersonalUsageContext(context.Background(), 42, []service.UsageLog{{ID: 3, UserID: 99}})
 	require.NoError(t, err)
 	require.NoError(t, mock.ExpectationsWereMet())
 }

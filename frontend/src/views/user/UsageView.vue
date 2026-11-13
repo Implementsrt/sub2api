@@ -190,7 +190,7 @@
           @ipGeoBatchFailed="handleIpGeoBatchFailed"
         >
           <template #cell-session_name="{ row }">
-            <span class="inline-block max-w-xs truncate align-middle text-sm" :title="row.session_name || personalLabels.noTitle">{{ row.session_name || '—' }}</span>
+            <SessionNameCell :row="row" />
           </template>
           <template #cell-cache_hit_rate="{ row }"><CacheHitRateCell :row="row" /></template>
           <template #cell-latency="{ row }"><TimingComparisonCell :row="row" :allow-comparison="timingAuthStore.isAdmin" /></template>
@@ -237,6 +237,7 @@ import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'
 import CacheHitRateCell from '@/extensions/personalUsage/CacheHitRateCell.vue'
+import SessionNameCell from '@/extensions/personalUsage/SessionNameCell.vue'
 import TimingComparisonCell from '@/extensions/personalUsage/TimingComparisonCell.vue'
 import { useAuthStore } from '@/stores/auth'
 import { formatCacheHitRate, usePersonalUsageLabels, type PersonalUsageLog } from '@/extensions/personalUsage'
@@ -705,6 +706,7 @@ const exportToCSV = async () => {
       'Session Name',
       'Cache Hit Rate',
       'Cache Drop (percentage points)',
+'Thread ID', 'Parent Thread ID', 'Request Kind', 'Subagent', 'Session Match',
     ]
     const rows = allLogs.map((log) => [
       log.created_at,
@@ -728,6 +730,8 @@ const exportToCSV = async () => {
       log.session_name ?? '',
       formatCacheHitRate(log),
       log.cache_drop?.drop_points ?? '',
+log.session_identity?.thread_id ?? '', log.session_identity?.parent_thread_id ?? '',
+log.session_identity?.kind ?? '', log.session_identity?.subagent ?? '', log.session_identity?.match ?? 'session_only',
     ].map(escapeCSVValue))
     const csvContent = [
       headers.map(escapeCSVValue).join(','),

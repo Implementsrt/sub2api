@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -23,6 +24,7 @@ type personalUsageRepo struct {
 	rows          []service.UsageLog
 	userID        int64
 	estimateCalls int
+	identities    map[int64]*personalusage.Identity
 }
 
 func (r *personalUsageRepo) ListUpstreamEstimates(_ context.Context, userID int64, ids []int64) (map[int64]*upstreampricing.Estimate, error) {
@@ -96,4 +98,52 @@ func TestPersonalUsageRowsUnavailable(t *testing.T) {
 	require.Equal(t, &id, rows[0].SessionID)
 	require.Empty(t, rows[0].SessionName)
 	require.Nil(t, rows[0].CacheDrop)
+}
+
+func (r *personalUsageRepo) ListPersonalUsageIdentities(_ context.Context, userID int64, records []service.UsageLog) (map[int64]*personalusage.Identity, error) {
+	if r.identities != nil {
+		return r.identities, nil
+	}
+	out := map[int64]*personalusage.Identity{}
+	for _, row := range records {
+		if (userID == 0 || row.UserID == userID) && row.SessionID != nil {
+			out[row.ID] = &personalusage.Identity{ThreadID: *row.SessionID}
+		}
+	}
+	return out, nil
+}
+
+func TestPersonalUsageRowsGuardianLocalMetadata(t *testing.T) {
+	home := t.TempDir()
+	guardian := "cccccccc-bbbb-cccc-dddd-eeeeeeeeeeee"
+	parent := "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+	db, err := sql.Open("sqlite", filepath.Join(home, "state_5.sqlite"))
+	require.NoError(t, err)
+	defer db.Close()
+	_, err = db.Exec(`CREATE TABLE threads(id text,title text,source text);INSERT INTO threads VALUES(?, 'private review input', '{"subagent":{"other":"guardian"}}')`, guardian)
+	require.NoError(t, err)
+	saved := personalUsageTitles
+	personalUsageTitles = &personalusage.TitleResolver{CodexHome: home, ClaudeHome: home}
+	t.Cleanup(func() { personalUsageTitles = saved })
+	t.Setenv("PERSONAL_USAGE_LOCAL_TITLES", "true")
+	duration := 100
+	before := service.UsageLog{ID: 10, UserID: 42, AccountID: 7, Model: "gpt", SessionID: &parent, InputTokens: 10, CacheReadTokens: 90, DurationMs: &duration, CreatedAt: time.Now()}
+	after := before
+	after.ID = 11
+	after.CreatedAt = before.CreatedAt.Add(time.Minute)
+	after.InputTokens = 80
+	after.CacheReadTokens = 20
+	repo := &personalUsageRepo{rows: []service.UsageLog{before, after}, identities: map[int64]*personalusage.Identity{10: {ThreadID: guardian}, 11: {ThreadID: guardian}}}
+	h := NewUsageHandler(service.NewUsageService(repo, nil, nil, nil), nil, nil, nil)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("GET", "/usage", nil)
+	c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 42})
+	c.Set(string(middleware.ContextKeyUserRole), service.RoleAdmin)
+	rows := h.personalUsageRows(c, []service.UsageLog{after})
+	require.Equal(t, "guardian", rows[0].SessionName)
+	require.Equal(t, "guardian", rows[0].SessionIdentity.Subagent)
+	require.Equal(t, guardian, rows[0].SessionIdentity.ThreadID)
+	require.Equal(t, parent, *rows[0].SessionID)
+	require.Nil(t, rows[0].CacheDrop)
+	require.Equal(t, "not_comparable", rows[0].CacheMonitoringStatus)
 }

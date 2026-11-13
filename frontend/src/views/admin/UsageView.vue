@@ -136,7 +136,7 @@
             @ipGeoBatchFailed="handleIpGeoBatchFailed"
           >
             <template #cell-session_name="{ row }">
-              <span class="inline-block max-w-xs truncate align-middle text-sm" :title="row.session_name || personalLabels.noTitle">{{ row.session_name || '—' }}</span>
+              <SessionNameCell :row="row" />
             </template>
             <template #cell-cache_hit_rate="{ row }"><CacheHitRateCell :row="row" /></template>
             <template #cell-latency="{ row }"><TimingComparisonCell :row="row" /></template>
@@ -202,6 +202,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination fro
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'; import UsageExportProgress from '@/components/admin/usage/UsageExportProgress.vue'
 import CacheHitRateCell from '@/extensions/personalUsage/CacheHitRateCell.vue'
+import SessionNameCell from '@/extensions/personalUsage/SessionNameCell.vue'
 import TimingComparisonCell from '@/extensions/personalUsage/TimingComparisonCell.vue'
 import { formatCacheHitRate, usePersonalUsageLabels, type PersonalAdminUsageLog } from '@/extensions/personalUsage'
 import UserTokenRanking from '@/components/admin/usage/UserTokenRanking.vue'
@@ -595,7 +596,7 @@ const exportToExcel = async () => {
       t('usage.rate'), t('usage.accountMultiplier'), t('usage.original'), t('usage.userBilled'), t('usage.accountBilled'),
       t('usage.firstToken'), t('usage.duration'),
       t('admin.usage.requestId'), t('admin.usage.upstreamRequestId'), t('usage.userAgent'), t('admin.usage.ipAddress'),
-      'Session ID', personalLabels.value.sessionName, personalLabels.value.cacheHitRate, 'Cache Drop (percentage points)'
+      'Session ID', personalLabels.value.sessionName, personalLabels.value.cacheHitRate, 'Cache Drop (percentage points)', 'Thread ID', 'Parent Thread ID', 'Request Kind', 'Subagent', 'Session Match'
     ]
     const ws = XLSX.utils.aoa_to_sheet([headers])
     while (true) {
@@ -615,7 +616,9 @@ const exportToExcel = async () => {
         log.total_cost?.toFixed(6) || '0.000000', log.actual_cost?.toFixed(6) || '0.000000',
         ((log.account_stats_cost ?? log.total_cost) * (log.account_rate_multiplier ?? 1)).toFixed(6), log.first_token_ms ?? '', log.duration_ms,
         log.request_id || '', log.upstream_request_id || '', log.user_agent || '', log.ip_address || '',
-        log.session_id || '', log.session_name || '', formatCacheHitRate(log), log.cache_drop?.drop_points ?? ''
+        log.session_id || '', log.session_name || '', formatCacheHitRate(log), log.cache_drop?.drop_points ?? '',
+log.session_identity?.thread_id ?? '', log.session_identity?.parent_thread_id ?? '',
+log.session_identity?.kind ?? '', log.session_identity?.subagent ?? '', log.session_identity?.match ?? 'session_only'
       ])
       if (rows.length) {
         XLSX.utils.sheet_add_aoa(ws, rows, { origin: -1 })

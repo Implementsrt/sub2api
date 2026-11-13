@@ -51,8 +51,22 @@ func cleanTitle(title string) string {
 	return title
 }
 
+type SessionInfo struct {
+	Name           string
+	Kind           string
+	ParentThreadID string
+}
+
 func (r *TitleResolver) Resolve(ctx context.Context, ids []string) map[string]string {
-	result, missing := make(map[string]string), make(map[string]bool)
+	result := map[string]string{}
+	for id, info := range r.ResolveDetails(ctx, ids) {
+		result[id] = info.Name
+	}
+	return result
+}
+
+func (r *TitleResolver) ResolveDetails(ctx context.Context, ids []string) map[string]SessionInfo {
+	result, missing := make(map[string]SessionInfo), make(map[string]bool)
 	for _, id := range ids {
 		// Local Codex/Claude sessions use UUIDs. Never interpolate arbitrary
 		// request headers into filesystem paths or globs.
@@ -66,7 +80,7 @@ func (r *TitleResolver) Resolve(ctx context.Context, ids []string) map[string]st
 	}
 	titles := make(map[string]string)
 	r.readCodexIndex(ctx, missing, titles)
-	r.readCodexDB(ctx, missing, titles) // SQLite titles take precedence over the index.
+	details := r.readCodexDB(ctx, missing, titles) // SQLite names take precedence over the index.
 	for id := range missing {
 		if ctx.Err() != nil {
 			break
@@ -75,7 +89,9 @@ func (r *TitleResolver) Resolve(ctx context.Context, ids []string) map[string]st
 			titles[id] = r.readClaudeTitle(ctx, id)
 		}
 		title := cleanTitle(titles[id])
-		result[id] = title
+		info := details[id]
+		info.Name = title
+		result[id] = info
 	}
 	return result
 }
@@ -109,14 +125,15 @@ func (r *TitleResolver) readCodexIndex(ctx context.Context, ids map[string]bool,
 	})
 }
 
-func (r *TitleResolver) readCodexDB(ctx context.Context, ids map[string]bool, titles map[string]string) {
+func (r *TitleResolver) readCodexDB(ctx context.Context, ids map[string]bool, titles map[string]string) map[string]SessionInfo {
+	details := map[string]SessionInfo{}
 	path := filepath.Join(r.CodexHome, "state_5.sqlite")
 	if _, err := os.Stat(path); err != nil {
-		return
+		return details
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		return
+		return details
 	}
 	u := url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}
 	if !strings.HasPrefix(u.Path, "/") {
@@ -125,32 +142,100 @@ func (r *TitleResolver) readCodexDB(ctx context.Context, ids map[string]bool, ti
 	u.RawQuery = "mode=ro&_pragma=query_only(1)&_pragma=busy_timeout(100)"
 	db, err := sql.Open("sqlite", u.String())
 	if err != nil {
-		return
+		return details
 	}
 	defer db.Close()
+	// Codex schema evolves independently. Only select known metadata fields
+	// present in this database; never read first_user_message or rollout text.
+	columns := map[string]bool{}
+	schema, err := db.QueryContext(ctx, "PRAGMA table_info(threads)")
+	if err != nil {
+		return details
+	}
+	for schema.Next() {
+		var cid, notnull, pk int
+		var name, kind string
+		var def any
+		if schema.Scan(&cid, &name, &kind, &notnull, &def, &pk) == nil {
+			columns[name] = true
+		}
+	}
+	schema.Close()
+	column := func(name string) string {
+		if columns[name] {
+			return "COALESCE(" + name + ", '')"
+		}
+		return "''"
+	}
 	args, placeholders := make([]any, 0, len(ids)), make([]string, 0, len(ids))
 	for id := range ids {
 		args = append(args, id)
 		placeholders = append(placeholders, "?")
 	}
-	where := " FROM threads WHERE id IN (" + strings.Join(placeholders, ",") + ")"
-	// Desktop renames are stored in name; title remains the original title.
-	rows, err := db.QueryContext(ctx, "SELECT id, COALESCE(NULLIF(trim(name), ''), title)"+where, args...)
+	query := "SELECT id, " + column("name") + ", " + column("title") + ", " + column("source") + ", " + column("agent_nickname") + ", " + column("agent_path") + " FROM threads WHERE id IN (" + strings.Join(placeholders, ",") + ")"
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
-		// Older Codex databases do not have a name column.
-		rows, err = db.QueryContext(ctx, "SELECT id, title"+where, args...)
-	}
-	if err != nil {
-		return
+		return details
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id string
-		var title sql.NullString
-		if rows.Scan(&id, &title) == nil && title.Valid && title.String != "" {
-			titles[id] = title.String
+		var id, name, title, source, nickname, agentPath string
+		if rows.Scan(&id, &name, &title, &source, &nickname, &agentPath) != nil {
+			continue
 		}
+		info := SessionInfo{Kind: "main"}
+		var metadata struct {
+			Subagent *struct {
+				Other       string `json:"other"`
+				ThreadSpawn *struct {
+					Parent   string `json:"parent_thread_id"`
+					Nickname string `json:"agent_nickname"`
+					Path     string `json:"agent_path"`
+				} `json:"thread_spawn"`
+			} `json:"subagent"`
+		}
+		_ = json.Unmarshal([]byte(source), &metadata)
+		if metadata.Subagent != nil {
+			info.Kind = "subagent"
+			if strings.EqualFold(metadata.Subagent.Other, "guardian") {
+				info.Kind = "guardian"
+			}
+			if spawn := metadata.Subagent.ThreadSpawn; spawn != nil {
+				if uuidSession.MatchString(spawn.Parent) {
+					info.ParentThreadID = spawn.Parent
+				}
+				if nickname == "" {
+					nickname = spawn.Nickname
+				}
+				if agentPath == "" {
+					agentPath = spawn.Path
+				}
+			}
+			// Subagent title may contain the entire delegated prompt. Prefer
+			// an explicit rename, nickname or task path instead of showing it.
+			title = nickname
+			if task := strings.TrimSpace(agentPath); task != "" {
+				task = filepath.Base(filepath.FromSlash(task))
+				if task != "." && task != "/" {
+					if title != "" {
+						title += " · "
+					}
+					title += task
+				}
+			}
+			if title == "" {
+				title = info.Kind
+			}
+		}
+		if strings.TrimSpace(name) != "" {
+			title = name
+		}
+		if cleanTitle(title) != "" {
+			titles[id] = cleanTitle(title)
+		}
+		details[id] = info
 	}
+	return details
 }
 
 func (r *TitleResolver) readClaudeTitle(ctx context.Context, id string) string {

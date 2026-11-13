@@ -101,3 +101,13 @@ func TestAdminPersonalUsageRestrictedResponse(t *testing.T) {
 		require.NotContains(t, string(body), field)
 	}
 }
+
+func (r *adminPersonalUsageRepo) ListPersonalUsageIdentities(_ context.Context, userID int64, records []service.UsageLog) (map[int64]*personalusage.Identity, error) {
+	out := map[int64]*personalusage.Identity{}
+	for _, row := range records {
+		if (userID == 0 || row.UserID == userID) && row.SessionID != nil {
+			out[row.ID] = &personalusage.Identity{ThreadID: *row.SessionID}
+		}
+	}
+	return out, nil
+}
