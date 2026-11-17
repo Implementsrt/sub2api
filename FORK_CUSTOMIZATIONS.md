@@ -188,3 +188,20 @@ personal.2 将掉缓存标签合并至命中率列，并拆分个人/管理端�
 - 不修改已有账号或全局探测开关，仍使用原上游声明倍率接口与创建后的首次探测；站点不支持该接口时不猜测倍率。
 
 默认选择集中在 `frontend/src/extensions/personalUsage/accountDefaults.ts`，创建倍率校验集中在 `backend/internal/service/account_creation_defaults.go`，不新增迁移或依赖。新增页及 Grok 相关 57 项前端测试、TypeScript、ESLint、后端创建/编辑倍率与 handler 参数回归通过。构建发布 `0.2.21-personal.12`，下次运行根目录 `restart-local.cmd` 自动启用；本次保持当前服务运行，构建保留仍为 3 份。
+
+## 上游 0.2.22 合并（2026-11-17，personal.13）
+
+合并 `upstream/main` 的 `15871f904`（源版本 0.2.22），保留 main 上 personal.1–12 的定制。合并前保存本地分支 `codex/before-upstream-sync-20261117-personal12`，对应 `a09b182e4`；只向自己的 origin 推送合并结果。
+
+- 本次同步 186 个上游提交，涉及网关流式兼容、OpenAI 配额状态、计费通道合并、调度快照、Gemini 端点和模型定价等。具体以保留的上游提交历史为准，不将上游修复重新实现到扩展目录。
+- 两处文本冲突分别为 `backend/cmd/server/wire_gen.go` 和新增账号测试。服务装配保留本 fork 上游定价/定时同步服务，并纳入上游新增计费通道合并器的初始化和停止；使用 Wire 0.7.0 重新生成验证一致性。新增账号测试同时保留个人默认值和上游透传模型过滤用例。
+- API 合约测试的用量预期补充本 fork 已有的 `cache_monitoring_status` 和 `session_identity` 字段，继续严格校验完整响应；不为通过测试而移除扩展字段或放松断言。
+- Ollama 过期回调测试使用与已保存值明确相差一秒的新截止时间，避免 Windows 上连续两次读取时钟得到同一值，导致测试未实际构造“新一代”状态；保留原有 CAS、截止时间与通知断言，不改生产逻辑。
+- 模型目录网关测试的临时地址增加进程内唯一序号，避免 Windows 同一时钟刻度下多个场景共用全局缓存；保留原来的协议透传、失败回退和请求体断言，不改生产目录缓存。
+- 保留原始请求执行线程提取、用量落库后的身份/定价侧表写入、会话最新名称、缓存监测、账号默认值、菜单、个人站点说明、价格对比、Firefox 连接及定时明细/钱包功能。
+- 沿用上游 Go 1.27.4 要求及 go.mod 调整，不降级工具链；前端 package.json 和 pnpm-lock.yaml 未变化，无需更换依赖版本。
+- 上游新增 `251_group_force_openai_ultrafast.sql` 与 `251_group_usage_rollup_nonblocking_build.sql`，分别用于分组 Ultra Fast 开关和日汇总重建状态。迁移系统按完整文件名及校验和识别，与本 fork 的 251 文件共存；不改名或改写已经发布的迁移。
+
+前端 62 个文件、884 项相关测试及 TypeScript、ESLint 通过；隔离 PostgreSQL schema 验证执行线程身份、定价发布、明细周期、钱包和耗时匹配。后端执行全量单元检查，接口合约修正后 server/repository 整包回归通过；两项时钟相关测试修正后各重复 20 次通过，并复测相邻模型目录、回调及 fork 用例。Windows 备份单元测试在进程内临时加入已有 Git Bash 的 sh 路径后通过，不修改系统 PATH。`TestCgroupMemoryLimit/cgroup_path_cannot_escape_the_mount` 需要创建符号链接，本机缺少该权限；该上游测试保持原样，sysutil 其余用例通过。最终验证范围为全量检查加上述针对性复测。
+
+发布版本为 `0.2.22-personal.13`，通过根目录 `restart-local.cmd` 在下次重启启用。保持当前服务运行，未对运行数据库执行迁移；启用时由既有升级流程备份并执行尚未应用的迁移。构建继续保留默认 3 份，多余产物移入回收站。
