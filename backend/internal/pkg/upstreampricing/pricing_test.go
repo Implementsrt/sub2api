@@ -210,6 +210,34 @@ func TestUpstreamPricingRemoteGroupsAndExactIdentity(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestUpstreamPricingRemoteGroupsPreserveWhitespace(t *testing.T) {
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "Bearer synthetic-panel-credential", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/groups/available":
+			require.Equal(t, "Asia/Shanghai", r.URL.Query().Get("timezone"))
+			require.Equal(t, "1", r.Header.Get("X-User-UI-Request"))
+			_, _ = w.Write([]byte(`{"data":[{"id":5,"name":" paid ","rate_multiplier":9}]}`))
+		case "/api/v1/groups/rates":
+			_, _ = w.Write([]byte(`{"data":{"5":0.5}}`))
+		case "/api/v1/model-plaza":
+			_, _ = w.Write([]byte(`{"data":{"groups":[{"id":5,"name":" paid ","models":[{"name":"mapped","pricing":{"billing_mode":"token","input_price":0.000002,"output_price":0.000008}}]}]}}`))
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer site.Close()
+	r := NewRemote("")
+	c := Config{Provider: "sub2api", BaseURL: site.URL, Token: "synthetic-panel-credential", Group: " paid ", GroupID: "5"}
+	cat, err := r.Fetch(context.Background(), c)
+	require.NoError(t, err)
+	require.Equal(t, "0.5", cat.Group.Multiplier)
+	c.GroupID = "6"
+	_, err = r.Fetch(context.Background(), c)
+	require.Error(t, err)
+}
+
 func TestUpstreamPricingNewAPIAccessTokenMultiplier(t *testing.T) {
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "Bearer synthetic-panel-token", r.Header.Get("Authorization"))

@@ -176,7 +176,9 @@ func (r *Remote) Groups(ctx context.Context, c Config) ([]Group, error) {
 		g := object(item)
 		name := stringValue(g["name"])
 		id := stringValue(g["id"])
-		if !validName(name) || seen[name] || id == "" {
+		// Some panels retain leading/trailing spaces in group labels. Preserve
+		// the exact name for matching; whitespace alone is not an auth failure.
+		if !validName(strings.TrimSpace(name)) || len(name) > 300 || strings.ContainsAny(name, "\r\n\x00") || seen[name] || id == "" {
 			return nil, safeError("站点分组名重复或 ID 无效")
 		}
 		seen[name] = true

@@ -1,10 +1,17 @@
 <template>
   <div class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+    <template v-if="config.provider === 'sub2api'">
+      <button type="button" class="btn btn-secondary" :disabled="busy || !config.base_url" @click="readLocal">{{ busy ? '正在验证…' : '从本机 Firefox 读取凭证' }}</button>
+      <p class="text-xs text-gray-500">先在本机 Firefox 普通窗口登录上游站点，再点击读取；无需安装脚本。读取结果会验证站点用户和分组，之后仍需预览并应用。需要 Sub2API 也运行在这台 Windows 电脑上。</p>
+    </template>
+    <details>
+    <summary class="cursor-pointer text-sm text-gray-500">其他方式：站点连接脚本 / 手动导入</summary>
     <div class="flex flex-wrap items-center gap-3">
-      <button type="button" class="btn btn-secondary" :disabled="busy || !config.base_url" @click="start">自动读取凭证</button>
+      <button type="button" class="btn btn-secondary" :disabled="busy || !config.base_url" @click="start">通过站点脚本读取</button>
       <a v-if="config.base_url" :href="installer" target="_blank" rel="noopener noreferrer" class="text-sm text-primary-600 underline">安装 / 更新 Firefox 连接脚本</a>
     </div>
-    <p class="text-xs text-gray-500">Firefox 首次需安装 Tampermonkey 和当前站点连接脚本，并允许访问本机。以后点击“自动读取凭证”，会打开站点并自动导入已登录令牌，无需再次点击站点或复制。每个站点安装一次；更换本机地址后需更新脚本。站点仅在内存保存令牌时仍需手动导入。</p>
+    <p class="text-xs text-gray-500">Firefox 首次需安装 Tampermonkey 和当前站点连接脚本，并允许访问本机。以后点击“通过站点脚本读取”，会打开站点并自动导入已登录令牌，无需再次点击站点或复制。每个站点安装一次；更换本机地址后需更新脚本。站点仅在内存保存令牌时仍需手动导入。</p>
+    </details>
     <p v-if="error" role="alert" class="text-sm text-red-600">{{ error }}</p>
     <template v-if="pending">
       <p class="text-sm">已发起短时连接。若新标签页被浏览器阻止，<a :href="automaticSite" target="_blank" rel="noopener noreferrer" class="text-primary-600 underline">打开站点自动读取</a>。</p>
@@ -39,8 +46,18 @@ const bookmark = computed(() => pending.value ? stationConnectBookmark(site.valu
 const controller = new AbortController()
 let timer: ReturnType<typeof setTimeout> | undefined
 let generation = 0
-function cancel() { generation++; clearTimeout(timer); pending.value = undefined }
+function cancel() { generation++; clearTimeout(timer); pending.value = undefined; busy.value = false }
 watch(() => [props.accountId, props.revision, props.config.provider, props.config.base_url, props.config.user_id, props.config.token], cancel)
+async function readLocal() {
+  cancel(); const current = generation
+  busy.value = true; error.value = ''
+  try {
+    const value = await upstreamPricingAPI.localBrowserImport(props.accountId, props.revision, props.config, controller.signal)
+    if (current === generation) emit('imported', value)
+  } catch (e) {
+    if (current === generation && !controller.signal.aborted) error.value = (e as Error).message || '本机读取失败，请确认 Firefox 已登录站点'
+  } finally { if (current === generation) busy.value = false }
+}
 async function start() {
   // Reserve the tab during the user gesture, before awaiting the local API.
   const popup = window.open('about:blank', '_blank')
@@ -53,7 +70,7 @@ async function start() {
     site.value = props.config.base_url; pending.value = value; timer = setTimeout(() => poll(current), 2000)
     if (popup) popup.location.replace(automaticSite.value)
   } catch (e) { popup?.close(); if (!controller.signal.aborted) error.value = (e as Error).message || '连接失败' }
-  finally { busy.value = false }
+  finally { if (current === generation) busy.value = false }
 }
 async function poll(current: number) {
   if (!pending.value || current !== generation) return

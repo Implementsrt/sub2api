@@ -6,7 +6,7 @@ import BrowserConnectView from './BrowserConnectView.vue'
 import { stationConnectBookmark } from './browserConnect'
 import type { PricingConfig, PricingComparison } from '.'
 
-const api = vi.hoisted(() => ({ comparison: vi.fn(), startImport: vi.fn(), importStatus: vi.fn() }))
+const api = vi.hoisted(() => ({ comparison: vi.fn(), startImport: vi.fn(), importStatus: vi.fn(), localBrowserImport: vi.fn() }))
 vi.mock('./api', () => ({ upstreamPricingAPI: api }))
 vi.mock('@/components/layout/AppLayout.vue', () => ({ default: { template: '<div><slot /></div>' } }))
 const config: PricingConfig = { provider: 'newapi', base_url: 'https://example.com', group: '', automatic: true, interval_minutes: 60 }
@@ -36,6 +36,30 @@ describe('saved upstream comparison', () => {
 })
 
 describe('explicit station connection', () => {
+  it('imports a Sub2API Firefox session locally without opening a tab or installing a script', async () => {
+    api.localBrowserImport.mockResolvedValue({ id: 'native-import', status: 'ready', groups: [{ id: '5', name: ' paid ', multiplier: '0.5' }] })
+    const wrapper = mount(BrowserImportPanel, { props: { accountId: 7, revision: 2, config: { ...config, provider: 'sub2api' } } })
+    await wrapper.find('button').trigger('click'); await flushPromises()
+    expect(api.localBrowserImport).toHaveBeenCalledWith(7, 2, expect.objectContaining({ provider: 'sub2api' }), expect.any(AbortSignal))
+    expect(window.open).not.toHaveBeenCalled()
+    expect(api.startImport).not.toHaveBeenCalled()
+    expect(wrapper.emitted('imported')?.[0]?.[0]).toMatchObject({ id: 'native-import', status: 'ready' })
+    wrapper.unmount()
+  })
+  it('discards a local read when the selected account changes and shows readable failures', async () => {
+    let finish!: (value: unknown) => void
+    api.localBrowserImport.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const wrapper = mount(BrowserImportPanel, { props: { accountId: 7, revision: 2, config: { ...config, provider: 'sub2api' } } })
+    await wrapper.find('button').trigger('click')
+    await wrapper.setProps({ accountId: 8 })
+    finish({ id: 'stale', status: 'ready', groups: [] }); await flushPromises()
+    expect(wrapper.emitted('imported')).toBeUndefined()
+    api.localBrowserImport.mockRejectedValue(new Error('请先在 Firefox 登录站点'))
+    await wrapper.find('button').trigger('click'); await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('请先在 Firefox 登录站点')
+    expect(window.open).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
   it('only opens the local receiver after confirming on the expected station', () => {
     const open = vi.fn(), alert = vi.fn(), confirm = vi.fn(() => true)
     const code = decodeURIComponent(stationConnectBookmark(config.base_url, 'http://localhost:8080/pricing-browser-connect#synthetic-ticket').slice('javascript:'.length))

@@ -8,7 +8,7 @@ import (
 )
 
 // BrowserImports holds short-lived panel credentials supplied by the manual
-// form or a station-scoped userscript. Server-side browser profiles are never read.
+// form, a station-scoped userscript, or an authenticated local Firefox import.
 type BrowserImports struct {
 	mu      sync.Mutex
 	entries map[string]*browserImport

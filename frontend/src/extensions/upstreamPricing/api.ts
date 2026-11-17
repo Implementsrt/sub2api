@@ -3,6 +3,9 @@ import type { PricingConfig, PricingGroup, PricingState, Preview, PricingCompari
 
 const path = (id: number) => `/admin/upstream-pricing/accounts/${id}`
 export const upstreamPricingAPI = {
+  async localBrowserImport(id: number, revision: number, config: PricingConfig, signal?: AbortSignal) {
+    return (await apiClient.post<BrowserImportStatus>(`${path(id)}/local-browser-import`, { revision, config: { ...config, token: '', browser_import_id: '' } }, { signal, timeout: 50000 })).data
+  },
   async activity(id: number, signal?: AbortSignal) { return (await apiClient.get<ActivityState>(`${path(id)}/activity`, { signal })).data },
   async comparison(params: { model: string; account_id: number; page: number; page_size: number }, signal?: AbortSignal) {
     return (await apiClient.get<PricingComparison>('/admin/upstream-pricing/comparison', { params, signal })).data
