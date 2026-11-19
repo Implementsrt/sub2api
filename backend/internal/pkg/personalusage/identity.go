@@ -44,8 +44,9 @@ func DisplayIdentity(identity *Identity, info SessionInfo) IdentityDisplay {
 // Scope refuses session-only identities: several agents can share that header.
 // A guardian without its own thread cannot safely be compared even to another
 // guardian request in the same window.
+// Tool calls retain display metadata but never enter the comparison index.
 func (i *Identity) Scope() string {
-	if i == nil || i.ThreadID == "" {
+	if i == nil || i.ThreadID == "" || i.Kind == "tool" {
 		return ""
 	}
 	kind := i.Kind

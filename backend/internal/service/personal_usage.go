@@ -40,7 +40,7 @@ func (s *UsageService) PersonalUsageDrops(ctx context.Context, userID int64, rec
 		}
 		// Guardian requests often lack a stable independent thread. They are
 		// displayed but never participate in cache-drop comparisons.
-		if identity != nil && strings.EqualFold(identity.Subagent, "guardian") {
+		if IsPersonalUsageTool(row, identity) || (identity != nil && strings.EqualFold(identity.Subagent, "guardian")) {
 			session = ""
 		}
 		// Compare the actual upstream model when mapped, falling back to the

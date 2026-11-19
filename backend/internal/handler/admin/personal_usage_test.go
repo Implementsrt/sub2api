@@ -81,6 +81,14 @@ func TestAdminPersonalUsageRows(t *testing.T) {
 	require.NotContains(t, rows[1], "cache_drop")
 	require.NoError(t, os.WriteFile(path, []byte(`{"id":"`+id+`","thread_name":"Renamed"}`), 0600))
 	require.Equal(t, "Renamed", decode()[0]["session_name"])
+	endpoint := "/v1/alpha/search"
+	after.InboundEndpoint = &endpoint
+	rows = decode()
+	require.Equal(t, "Renamed", rows[0]["session_name"])
+	require.Equal(t, "not_comparable", rows[0]["cache_monitoring_status"])
+	require.NotContains(t, rows[0], "cache_drop")
+	require.Equal(t, "tool", rows[0]["session_identity"].(map[string]any)["kind"])
+	after.InboundEndpoint = nil
 	repo.fail = true
 	rows = decode()
 	require.Equal(t, "unavailable", rows[0]["cache_monitoring_status"])

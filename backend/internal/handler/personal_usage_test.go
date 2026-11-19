@@ -84,6 +84,20 @@ func TestPersonalUsageRows(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, repo.estimateCalls)
+	// Tools retain the latest title but cannot carry a cache-drop alert.
+	endpoint := "/v1/alpha/search"
+	after.InboundEndpoint = &endpoint
+	repo.identities = map[int64]*personalusage.Identity{after.ID: {Kind: "tool"}}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "/usage", nil)
+	c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 42})
+	c.Set(string(middleware.ContextKeyUserRole), service.RoleAdmin)
+	tool := h.personalUsageRows(c, []service.UsageLog{after})[0]
+	require.Equal(t, "Local title", tool.SessionName)
+	require.Equal(t, "related_session", tool.SessionIdentity.Match)
+	require.Equal(t, "tool", tool.SessionIdentity.Kind)
+	require.Equal(t, "not_comparable", tool.CacheMonitoringStatus)
+	require.Nil(t, tool.CacheDrop)
 }
 
 func TestPersonalUsageRowsUnavailable(t *testing.T) {

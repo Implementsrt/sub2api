@@ -34,6 +34,32 @@ describe('execution session names', () => {
     expect(wrapper.attributes('title')).toContain('无法区分父窗口、子代理和审核请求')
   })
 
+  it.each(['thread', 'related_session'] as const)('associates a tool by %s without a missing-thread warning', (match) => {
+    const row = {
+      session_name: 'Latest session name', session_id: 'parent',
+      session_identity: { match, kind: 'tool', ...(match === 'thread' ? { thread_id: 'child' } : {}) },
+      cache_monitoring_status: 'not_comparable', input_tokens: 90, cache_read_tokens: 10, cache_creation_tokens: 0,
+    } as PersonalUsageLog
+    const wrapper = mount(SessionNameCell, { props: { row }, global: global() })
+    expect(wrapper.text()).toContain('Latest session name')
+    expect(wrapper.text()).toContain('工具调用')
+    expect(wrapper.text()).not.toContain('线程未记录')
+    expect(wrapper.attributes('title')).toContain('不参与掉缓存比较')
+    expect(wrapper.attributes('title').includes('Thread ID: child')).toBe(match === 'thread')
+    const rate = mount(CacheHitRateCell, { props: { row }, global: global() })
+    expect(rate.get('span').attributes('title')).toContain('工具调用不参与掉缓存比较')
+  })
+
+  it('does not invent a session name for an unassociated historical tool', () => {
+    const wrapper = mount(SessionNameCell, { props: { row: {
+      session_identity: { match: 'related_session', kind: 'tool' },
+    } as PersonalUsageLog }, global: global() })
+    expect(wrapper.text()).toContain('—')
+    expect(wrapper.text()).toContain('工具调用')
+    expect(wrapper.text()).not.toContain('线程未记录')
+    expect(wrapper.attributes('title')).toContain('无会话 ID')
+  })
+
   it.each(['identity_missing', 'not_comparable'] as const)('explains excluded monitoring: %s', (status) => {
     const wrapper = mount(CacheHitRateCell, { props: { row: {
       input_tokens: 90, cache_read_tokens: 10, cache_creation_tokens: 0, cache_monitoring_status: status,

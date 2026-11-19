@@ -79,7 +79,7 @@ func PersonalUsageTitleID(row UsageLog, identity *personalusage.Identity) string
 	if identity != nil && identity.ThreadID != "" {
 		return identity.ThreadID
 	}
-	if identity != nil && identity.Subagent != "" {
+	if identity != nil && identity.Subagent != "" && !IsPersonalUsageTool(row, identity) {
 		// A parent's correlation header is not the unnamed review/agent's
 		// title. Display its known role with an unresolved-thread marker.
 		return ""
@@ -91,6 +91,9 @@ func PersonalUsageTitleID(row UsageLog, identity *personalusage.Identity) string
 }
 
 func PersonalUsageMonitoringStatus(row UsageLog, identity *personalusage.Identity, status string) string {
+	if IsPersonalUsageTool(row, identity) {
+		return "not_comparable"
+	}
 	if status != "ready" {
 		return status
 	}

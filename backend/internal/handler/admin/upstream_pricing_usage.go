@@ -78,8 +78,11 @@ func (h *UsageHandler) upstreamPricingRows(c *gin.Context, records []service.Usa
 			info = titles[service.PersonalUsageTitleID(*record, identities[record.ID])]
 		}
 		item.SessionName = info.Name
-		item.SessionIdentity = personalusage.DisplayIdentity(identities[record.ID], info)
+		item.SessionIdentity = service.PersonalUsageDisplayIdentity(*record, identities[record.ID], info)
 		item.CacheMonitoringStatus = service.PersonalUsageMonitoringStatus(*record, identities[record.ID], statuses[record.UserID])
+		if service.IsPersonalUsageTool(*record, identities[record.ID]) {
+			item.CacheDrop = nil
+		}
 		if item.SessionIdentity.Subagent == "guardian" {
 			item.CacheDrop = nil
 			item.CacheMonitoringStatus = "not_comparable"

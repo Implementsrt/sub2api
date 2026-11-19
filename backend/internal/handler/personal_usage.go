@@ -66,8 +66,11 @@ func (h *UsageHandler) personalUsageRows(c *gin.Context, records []service.Usage
 		row.UpstreamEstimate = estimates[records[i].ID]
 		info := titles[service.PersonalUsageTitleID(records[i], identities[records[i].ID])]
 		row.SessionName = info.Name
-		row.SessionIdentity = personalusage.DisplayIdentity(identities[records[i].ID], info)
+		row.SessionIdentity = service.PersonalUsageDisplayIdentity(records[i], identities[records[i].ID], info)
 		row.CacheMonitoringStatus = service.PersonalUsageMonitoringStatus(records[i], identities[records[i].ID], status)
+		if service.IsPersonalUsageTool(records[i], identities[records[i].ID]) {
+			row.CacheDrop = nil
+		}
 		if row.SessionIdentity.Subagent == "guardian" {
 			row.CacheDrop = nil
 			row.CacheMonitoringStatus = "not_comparable"

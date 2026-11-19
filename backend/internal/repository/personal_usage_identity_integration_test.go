@@ -80,6 +80,14 @@ func TestPersonalUsageIdentityIntegration(t *testing.T) {
 		row.ForkIdentity.ThreadID = "wrong-overwrite"
 		require.NoError(t, repo.RecordPersonalUsageIdentity(ctx, row))
 	}
+	// A search tool retains its exact child association but never becomes the
+	// predecessor of the child's model sampling lane, even between two turns.
+	_, err = db.ExecContext(ctx, `INSERT INTO usage_logs VALUES(10,42,8,'tool-request','shared-parent',$1)`, at.Add(55*time.Second))
+	require.NoError(t, err)
+	require.NoError(t, repo.RecordPersonalUsageIdentity(ctx, &service.UsageLog{
+		RequestID: "tool-request", APIKeyID: 8, UserID: 42,
+		ForkIdentity: &personalusage.Identity{ThreadID: "child-a", Kind: "tool", Source: "client_metadata_v1"},
+	}))
 	queryIDs := func(target int64) []int64 {
 		rows, err := db.QueryContext(ctx, personalUsageContextQuery([]string{"$2"}, "id"), int64(42), target)
 		require.NoError(t, err)
@@ -95,6 +103,14 @@ func TestPersonalUsageIdentityIntegration(t *testing.T) {
 	}
 	require.ElementsMatch(t, []int64{1, 7, 8}, queryIDs(7), "cross-page predecessor ignores parent, sibling, guardian, other user and other key")
 	require.ElementsMatch(t, []int64{7, 8, 9}, queryIDs(9), "equal-time predecessor ties remain ambiguous")
+	require.Empty(t, queryIDs(10), "tool requests must not enter the comparison query")
+	tools, err := repo.ListPersonalUsageIdentities(ctx, 42, []service.UsageLog{{ID: 10, UserID: 42}})
+	require.NoError(t, err)
+	require.Equal(t, "child-a", tools[10].ThreadID)
+	require.Equal(t, "tool", tools[10].Kind)
+	var toolScope string
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT scope_key FROM fork_usage_execution_identity WHERE usage_id=10`).Scan(&toolScope))
+	require.Empty(t, toolScope)
 	identities, err := repo.ListPersonalUsageIdentities(ctx, 42, []service.UsageLog{{ID: 1, UserID: 42}, {ID: 4, UserID: 99}})
 	require.NoError(t, err)
 	require.Len(t, identities, 1)

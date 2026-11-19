@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
+import { createPinia } from 'pinia'
 
 import UserUsageView from '@/views/user/UsageView.vue'
 import AdminUsageView from '@/views/admin/UsageView.vue'
@@ -220,6 +221,8 @@ function reasoningCellText(wrapper: ReturnType<typeof mount>): string {
 describe('usage reasoning effort page display', () => {
   beforeEach(() => {
     localStorage.clear()
+    // Exercise the explicit saved preference; this fork shows the column by default.
+    localStorage.setItem('usage-hidden-columns', JSON.stringify(['reasoning_effort']))
     userQuery.mockReset().mockResolvedValue({ items: [userMappedLog], total: 1, pages: 1 })
     userGetStats.mockReset().mockResolvedValue(emptyStats)
     userGetDashboardModels.mockReset().mockResolvedValue({ models: [], start_date: '2026-08-25', end_date: '2026-08-25' })
@@ -248,7 +251,7 @@ describe('usage reasoning effort page display', () => {
 
   it('user usage page only shows the requested reasoning effort', async () => {
     const wrapper = mount(UserUsageView, {
-      global: { stubs: sharedPageStubs },
+      global: { plugins: [createPinia()], stubs: sharedPageStubs },
     })
     await flushPromises()
 
