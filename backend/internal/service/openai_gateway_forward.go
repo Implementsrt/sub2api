@@ -1060,6 +1060,10 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	agentTaskRecoveryTried := false
 	rejectedFieldRetryState := openAIResponsesRejectedFieldRetryStateForRequest(c, body)
 	for {
+		upstreamBody, cacheErr := s.prepareCodexHTTPPromptCache(c, account, canonicalImageIntentBody, body)
+		if cacheErr != nil {
+			return nil, fmt.Errorf("prepare Codex prompt cache prefix: %w", cacheErr)
+		}
 		// Build upstream request
 		upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 		var headerGuard *openAIFirstOutputHeaderGuard
@@ -1068,8 +1072,8 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				upstreamCtx, releaseUpstreamCtx, startTime.Add(firstOutputTimeout),
 			)
 		}
-		syncOpenAIResponsesInstructionsEcho(c, body)
-		upstreamReq, err := s.buildUpstreamRequest(upstreamCtx, c, account, body, token, reqStream, promptCacheKey, isCodexCLI)
+		syncOpenAIResponsesInstructionsEcho(c, upstreamBody)
+		upstreamReq, err := s.buildUpstreamRequest(upstreamCtx, c, account, upstreamBody, token, reqStream, promptCacheKey, isCodexCLI)
 		if headerGuard == nil {
 			releaseUpstreamCtx()
 		}

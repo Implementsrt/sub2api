@@ -358,14 +358,18 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	imageCount := 0
 	var imageOutputSizes []string
 	for {
+		upstreamBody, cacheErr := s.prepareCodexHTTPPromptCache(c, account, canonicalImageIntentBody, body)
+		if cacheErr != nil {
+			return nil, fmt.Errorf("prepare Codex prompt cache prefix: %w", cacheErr)
+		}
 		actualModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
 		if actualModel == "" {
 			actualModel = reqModel
 		}
 		SetOpsUpstreamModel(c, actualModel)
 		upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
-		syncOpenAIResponsesInstructionsEcho(c, body)
-		upstreamReq, buildErr := s.buildUpstreamRequestOpenAIPassthrough(upstreamCtx, c, account, body, token)
+		syncOpenAIResponsesInstructionsEcho(c, upstreamBody)
+		upstreamReq, buildErr := s.buildUpstreamRequestOpenAIPassthrough(upstreamCtx, c, account, upstreamBody, token)
 		releaseUpstreamCtx()
 		if buildErr != nil {
 			return nil, buildErr
