@@ -7,7 +7,7 @@
 ## 完成功能后
 
 1. 运行修改对应的测试与检查。
-2. 在仓库根目录执行 `powershell -NoProfile -ExecutionPolicy Bypass -File deploy/fork-local/build.ps1`。可用 `-Version 0.2.21-personal.6` 指定版本；默认使用源码版本及当前时间。Go 不在 PATH 时可用 `-GoExe` 指定。
+2. 在仓库根目录执行 `powershell -NoProfile -ExecutionPolicy Bypass -File deploy/fork-local/build.ps1`。默认从最近一次成功发布的同基础版本递增 `-personal.1` 到 `-personal.10`，到 10 后回到 1。基础版本变化或上一版本仍用时间后缀时，从 1 开始。可用 `-Version 0.2.24-personal.6` 指定版本。Go 不在 PATH 时可用 `-GoExe` 指定。
 3. 构建脚本先运行语言包检查、TypeScript、Vite 和 Go embed 构建。全部成功才发布 `local-runtime/latest-build.json`。新版程序保存在独立的 `releases/<ID>/sub2api.exe`；构建失败不覆盖原待启用版本。前端依赖必须事先按仓库锁文件安装。
 4. 提交并推送源码到 `origin` 当前分支。遵循根目录 `AGENTS.md`；不得提交私密运行文件。
 

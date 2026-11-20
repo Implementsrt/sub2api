@@ -6,10 +6,6 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $RuntimePath = [IO.Path]::GetFullPath($RuntimePath)
-if (!$Version) {
-    $baseVersion = (Get-Content -LiteralPath (Join-Path $repoPath 'backend\cmd\server\VERSION') -Raw).Trim()
-    $Version = "$baseVersion-personal.$(Get-Date -Format 'yyyyMMddHHmmss')"
-}
 if (!$GoExe) {
     $goCommand = Get-Command go -ErrorAction SilentlyContinue
     if ($goCommand) { $GoExe = $goCommand.Source }
@@ -22,6 +18,19 @@ if (& git -C $repoPath status --porcelain --untracked-files=normal) { $commit +=
 New-Item -ItemType Directory -Path (Join-Path $RuntimePath 'builds') -Force | Out-Null
 $buildLock = [IO.File]::Open((Join-Path $RuntimePath 'build.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
 try {
+    if (!$Version) {
+        $baseVersion = (Get-Content -LiteralPath (Join-Path $repoPath 'backend\cmd\server\VERSION') -Raw).Trim()
+        $manifestPath = Join-Path $RuntimePath 'latest-build.json'
+        $next = 1
+        if (Test-Path -LiteralPath $manifestPath) {
+            $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+            $pattern = '^' + [regex]::Escape($baseVersion) + '-personal\.(10|[1-9])$'
+            if ($manifest.version -match $pattern) {
+                $next = ([int]$Matches[1] % 10) + 1
+            }
+        }
+        $Version = "$baseVersion-personal.$next"
+    }
     $candidatePath = Join-Path $RuntimePath "builds\sub2api-$Version-$([Guid]::NewGuid().ToString('N')).exe"
     Push-Location (Join-Path $repoPath 'frontend')
     try {
