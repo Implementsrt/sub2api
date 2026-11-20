@@ -23,11 +23,13 @@ export interface PricingConfig {
   user_id?: string
   group: string
   group_id?: string
+  model_price_group_id?: string
   automatic: boolean
   interval_minutes: number
   overrides?: Price[]
 }
 export interface PricingGroup { id?: string; name: string; multiplier: string }
+export interface ModelPriceGroup { id: string; name: string }
 export interface ActivityState {
   configured: boolean
   last_success: string | null
@@ -52,6 +54,7 @@ export interface BrowserImportStart { id: string; ticket: string; expires_at: st
 export interface BrowserImportStatus { id: string; status: 'waiting' | 'validating' | 'ready' | 'failed'; user_id: string; groups?: PricingGroup[]; error?: string }
 export interface Catalog {
   group: PricingGroup
+  model_price_group?: ModelPriceGroup
   models: Price[]
   supported: number
   unsupported: number
@@ -93,6 +96,8 @@ const messages = {
     probeHint: '账号设置中的倍率探测使用 Sub2API 专用接口；New API 请在“上游定价”中填写访问令牌并读取分组。读取的倍率用于上游预计扣费，不自动覆盖账号统计倍率。',
     tokenSaved: '已加密保存；留空保留。更换站点或账号身份后需要重新填写。',
     group: '上游计费分组', readGroups: '读取可用分组', chooseGroup: '请选择准确的计费分组', automatic: '自动同步',
+    modelPriceGroup: '模型价格来源分组', readModelPriceGroups: '读取模型广场分组', billingGroupPrices: '使用计费分组的模型价格',
+    modelPriceGroupHint: '上游共用模型单价时，可选择公布单价的分组。估算仍使用上方计费分组的倍率。',
     interval: '同步间隔', minutes: '分钟', preview: '预览价格差异', apply: '应用此预览', sync: '立即同步已保存配置',
     schedule: '保存同步计划', loading: '处理中…', error: '操作失败，请稍后重试', saved: '已应用价格，后续请求将使用此版本',
     note: '按上游账号独立估算，不改变本机扣费。价格表计算结果不等于站点实际账单。',
@@ -116,6 +121,8 @@ const messages = {
     probeHint: 'The account multiplier probe uses a Sub2API-specific endpoint. For New API, enter a panel token under Upstream pricing and read groups. These multipliers estimate upstream costs without replacing account statistics multipliers.',
     tokenSaved: 'Stored encrypted; leave blank to keep. Enter again after changing the site or account identity.',
     group: 'Upstream billing group', readGroups: 'Read available groups', chooseGroup: 'Select the exact billing group', automatic: 'Automatic sync',
+    modelPriceGroup: 'Model price source group', readModelPriceGroups: 'Read model plaza groups', billingGroupPrices: 'Use the billing group’s model prices',
+    modelPriceGroupHint: 'If upstream groups share model prices, select the group that publishes them. Estimates use the billing group multiplier selected above.',
     interval: 'Sync interval', minutes: 'minutes', preview: 'Preview price changes', apply: 'Apply this preview', sync: 'Sync saved settings now',
     schedule: 'Save schedule', loading: 'Working…', error: 'Operation failed. Please try again.', saved: 'Prices applied to subsequent requests',
     note: 'Estimated per upstream account. Local billing is unchanged. Estimates are not settled upstream charges.',

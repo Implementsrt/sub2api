@@ -26,6 +26,20 @@
         </label>
         <button type="button" class="btn btn-secondary" @click="readGroups">{{ labels.readGroups }}</button>
       </div>
+      <div v-if="form.provider === 'sub2api' && form.group" class="space-y-1">
+        <div class="flex items-end gap-3">
+          <label class="flex-1 space-y-1 text-sm">
+            <span>{{ labels.modelPriceGroup }}</span>
+            <select v-model="form.model_price_group_id" class="input">
+              <option value="">{{ labels.billingGroupPrices }}</option>
+              <option v-if="unlistedModelPriceGroup" :value="unlistedModelPriceGroup.id">{{ unlistedModelPriceGroup.name }}</option>
+              <option v-for="g in modelPriceGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            </select>
+          </label>
+          <button type="button" class="btn btn-secondary" @click="readModelPriceGroups">{{ labels.readModelPriceGroups }}</button>
+        </div>
+        <p class="text-xs text-gray-500">{{ labels.modelPriceGroupHint }}</p>
+      </div>
       <div class="flex flex-wrap items-end gap-4">
         <label class="flex items-center gap-2 py-2 text-sm"><input v-model="form.automatic" type="checkbox" />{{ labels.automatic }}</label>
         <label class="space-y-1 text-sm"><span>{{ labels.interval }}</span><select v-model.number="form.interval_minutes" class="input">
@@ -54,6 +68,7 @@
 
     <div v-if="catalog" class="space-y-3">
       <p class="text-sm">{{ labels.supported }} {{ catalog.supported }} · {{ labels.unsupported }} {{ catalog.unsupported }} · {{ labels.multiplier }} {{ catalog.group.multiplier }}x</p>
+      <p v-if="catalog.model_price_group" class="text-xs text-gray-500">{{ labels.modelPriceGroup }} · {{ catalog.model_price_group.name }}</p>
       <p class="text-xs text-gray-500">{{ labels.unit }} · {{ labels.partial }}</p>
       <input v-model="search" class="input" :placeholder="labels.search" :aria-label="labels.search" />
       <div class="max-h-80 overflow-auto rounded-lg border border-gray-200 dark:border-dark-600">
@@ -100,14 +115,15 @@ import { upstreamPricingAPI } from './api'
 import ActivityStatusPanel from './ActivityStatusPanel.vue'
 import BrowserImportPanel from './BrowserImportPanel.vue'
 import type { BrowserImportStatus } from '.'
-import { blankPrice, useUpstreamPricingLabels, type Catalog, type Price, type Preview, type PricingConfig, type PricingGroup, type PricingState } from '.'
+import { blankPrice, useUpstreamPricingLabels, type Catalog, type ModelPriceGroup, type Price, type Preview, type PricingConfig, type PricingGroup, type PricingState } from '.'
 
 const props = defineProps<{ accountId: number; defaultBaseUrl?: string }>()
 const labels = useUpstreamPricingLabels()
 const state = ref<PricingState | null>(null)
 const groups = ref<PricingGroup[]>([])
+const modelPriceGroups = ref<ModelPriceGroup[]>([])
 const preview = ref<Preview | null>(null)
-const form = reactive<PricingConfig>({ provider: 'newapi', base_url: '', token: '', group: '', automatic: true, interval_minutes: 60, overrides: [] })
+const form = reactive<PricingConfig>({ provider: 'newapi', base_url: '', token: '', group: '', model_price_group_id: '', automatic: true, interval_minutes: 60, overrides: [] })
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
@@ -119,13 +135,19 @@ const controller = new AbortController()
 let alive = true
 const catalog = computed<Catalog | null>(() => preview.value?.catalog || state.value?.catalog || null)
 const matchingModels = computed(() => (catalog.value?.models || []).filter(p => p.model.toLowerCase().includes(search.value.toLowerCase())).slice(0, 100))
-const connection = () => JSON.stringify([form.provider, form.base_url, form.user_id || '', form.group, form.group_id || '', form.overrides || [], form.token || '', form.browser_import_id || ''])
+const connection = () => JSON.stringify([form.provider, form.base_url, form.user_id || '', form.group, form.group_id || '', form.model_price_group_id || '', form.overrides || [], form.token || '', form.browser_import_id || ''])
 const dirty = computed(() => connection() !== baseline.value)
 const groupKey = (g: PricingGroup) => `${g.id || ''}:${g.name}`
 const selectedGroup = computed({ get: () => form.group ? groupKey({ id: form.group_id, name: form.group, multiplier: '' }) : '', set: (value: string) => {
   const group = groups.value.find(g => groupKey(g) === value)
   form.group = group?.name || ''; form.group_id = group?.id || ''
 } })
+const unlistedModelPriceGroup = computed<ModelPriceGroup | null>(() => {
+  const id = form.model_price_group_id
+  if (!id || modelPriceGroups.value.some(group => group.id === id)) return null
+  const saved = state.value?.catalog?.model_price_group
+  return saved?.id === id ? saved : { id, name: `#${id}` }
+})
 const date = (value?: string | null) => value ? new Date(value).toLocaleString() : labels.value.never
 type PriceField = 'input' | 'output' | 'cache_read' | 'cache_write' | 'cache_write_1h' | 'cache_write_30m' | 'cache_write_12h'
 const priceFields = computed<{ key: PriceField; label: string }[]>(() => [
@@ -143,7 +165,10 @@ function saveOverride() {
 }
 function removeOverride(model: string) { form.overrides = (form.overrides || []).filter(p => p.model !== model) }
 watch(form, () => { preview.value = null; notice.value = '' }, { deep: true, flush: 'sync' })
-watch(() => [form.provider, form.base_url, form.user_id, form.token], () => { form.browser_import_id = '' }, { flush: 'sync' })
+watch(() => [form.provider, form.base_url, form.user_id, form.token], () => {
+  form.browser_import_id = ''
+  modelPriceGroups.value = []
+}, { flush: 'sync' })
 function receiveImport(value: BrowserImportStatus) {
   form.token = ''; form.user_id = value.user_id
   form.browser_import_id = value.id
@@ -151,6 +176,7 @@ function receiveImport(value: BrowserImportStatus) {
   if (!groups.value.some(g => g.name === form.group && (g.id || '') === (form.group_id || ''))) { form.group = ''; form.group_id = '' }
 }
 watch(() => [form.provider, form.base_url, form.user_id, form.group, form.group_id], () => {
+  form.model_price_group_id = ''
   form.overrides = []
   clearEditor()
 }, { flush: 'sync' })
@@ -159,7 +185,8 @@ async function load() {
   const value = await upstreamPricingAPI.get(props.accountId, controller.signal)
   if (!alive) return
   state.value = value
-  Object.assign(form, { token: '', browser_import_id: '', user_id: '', group_id: '', overrides: [] }, value.source.config)
+  const { model_price_group_id = '', ...config } = value.source.config
+  Object.assign(form, { token: '', browser_import_id: '', user_id: '', group_id: '', overrides: [] }, config, { model_price_group_id })
   form.token = ''
   if (!value.source.has_credential && !form.base_url) form.base_url = props.defaultBaseUrl || ''
   groups.value = form.group ? [{ name: form.group, id: form.group_id, multiplier: value.catalog?.group.multiplier || '' }] : []
@@ -175,6 +202,10 @@ function readGroups() { return run(async () => {
   if (!alive) return
   groups.value = value
   if (!value.some(g => g.name === form.group && (g.id || '') === (form.group_id || ''))) { form.group = ''; form.group_id = '' }
+}) }
+function readModelPriceGroups() { return run(async () => {
+  const value = await upstreamPricingAPI.modelPriceGroups(props.accountId, { ...form }, controller.signal)
+  if (alive) modelPriceGroups.value = value
 }) }
 function makePreview() { return run(async () => { const value = await upstreamPricingAPI.preview(props.accountId, state.value?.source.revision || 0, { ...form }, controller.signal); if (alive) preview.value = value }) }
 function applyPreview() { return run(async () => {

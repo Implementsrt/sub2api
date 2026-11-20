@@ -71,6 +71,11 @@ func randomToken() string {
 func encoded(v any) []byte         { b, _ := json.Marshal(v); return b }
 func publicConfig(c Config) Config { c.Token = ""; c.BrowserImportID = ""; return c }
 
+func samePricingGroup(a, b Config) bool {
+	return a.Provider == b.Provider && a.BaseURL == b.BaseURL && a.UserID == b.UserID &&
+		a.Group == b.Group && a.GroupID == b.GroupID && a.ModelPriceGroupID == b.ModelPriceGroupID
+}
+
 // Use the same selected-account snapshot at dispatch and when validating a source.
 // Never persist or return the actual inference credentials in pricing metadata.
 func AccountFingerprint(kind, platform string, credentials map[string]any) string {
@@ -245,8 +250,7 @@ func publish(ctx context.Context, tx *sql.Tx, id int64, c Config, credential, fp
 	// Scheduling changes do not change price identity, but connection/group changes do.
 	var previous Config
 	_ = json.Unmarshal(oldConfig, &previous)
-	identitySame := previous.Provider == c.Provider && previous.BaseURL == c.BaseURL && previous.UserID == c.UserID && previous.Group == c.Group && previous.GroupID == c.GroupID
-	if version == 0 || oldHash != cat.Fingerprint || oldFP != fp || !identitySame {
+	if version == 0 || oldHash != cat.Fingerprint || oldFP != fp || !samePricingGroup(previous, c) {
 		if _, err = tx.ExecContext(ctx, `UPDATE fork_upstream_pricing_versions SET effective_until=$2 WHERE account_id=$1 AND effective_until IS NULL`, id, now); err != nil {
 			return 0, err
 		}

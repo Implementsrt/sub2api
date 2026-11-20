@@ -103,7 +103,7 @@ func TestUpstreamPricingNewAPINormalization(t *testing.T) {
 
 func TestUpstreamPricingSub2APINormalization(t *testing.T) {
 	v := payload(t, `{"data":{"groups":[{"id":5,"name":"paid","models":[{"name":"mapped","pricing":{"billing_mode":"token","input_price":0.000002,"output_price":0.000008,"cache_read_price":2e-7,"cache_write_price":0.000003,"cache_write_1h_price":0.000006,"cache_write_12h_price":0.000007}},{"name":"reference-only","official_pricing":{"input_price":1}},{"name":"time","time_pricing":{"periods":[{"multiplier":2}]},"pricing":{"billing_mode":"token","input_price":1,"output_price":1}},{"name":"tiered","pricing":{"billing_mode":"token","input_price":1,"output_price":1,"intervals":[{"min_tokens":0,"max_tokens":100}]}},{"name":"effort","pricing":{"billing_mode":"token","input_price":1,"output_price":1,"reasoning_effort_multipliers":{"high":2}}}]}]}}`)
-	c, err := NormalizeSub2API(v, Group{ID: "5", Name: "paid", Multiplier: "0.4"})
+	c, err := NormalizeSub2API(v, Group{ID: "5", Name: "paid", Multiplier: "0.4"}, "")
 	require.NoError(t, err)
 	require.Equal(t, 1, c.Supported)
 	require.Equal(t, 4, c.Unsupported)
@@ -116,9 +116,9 @@ func TestUpstreamPricingSub2APINormalization(t *testing.T) {
 	require.Equal(t, "2", *p.Input)
 	require.Equal(t, "0.2", *p.CacheRead)
 	require.Equal(t, "6", *p.CacheWrite1h)
-	_, err = NormalizeSub2API(v, Group{ID: "6", Name: "paid", Multiplier: "1"})
+	_, err = NormalizeSub2API(v, Group{ID: "6", Name: "paid", Multiplier: "1"}, "")
 	require.Error(t, err)
-	_, err = NormalizeSub2API(v, Group{ID: "5", Name: "other", Multiplier: "1"})
+	_, err = NormalizeSub2API(v, Group{ID: "5", Name: "other", Multiplier: "1"}, "")
 	require.Error(t, err)
 }
 
@@ -154,7 +154,7 @@ func TestUpstreamPricingDoesNotRoundUnsupportedConvertedPricesToFree(t *testing.
 
 func TestUpstreamPricingOpenAI30mPriceCard(t *testing.T) {
 	v := payload(t, `{"data":{"groups":[{"id":5,"name":"paid","models":[{"name":"mapped","platform":"openai","pricing":{"billing_mode":"token","input_price":0.000002,"output_price":0.000008,"cache_write_price":0.000003,"cache_write_12h_price":0.000007}}]}]}}`)
-	c, err := NormalizeSub2API(v, Group{ID: "5", Name: "paid", Multiplier: "1"})
+	c, err := NormalizeSub2API(v, Group{ID: "5", Name: "paid", Multiplier: "1"}, "")
 	require.NoError(t, err)
 	require.Equal(t, "3", *c.Models[0].CacheWrite30m)
 	e := Calculate(c, Usage{Model: "mapped", Input: 1000000, CacheWrite: 1000000, CacheWrite30m: 500000, CacheWrite12h: 500000})
@@ -236,6 +236,51 @@ func TestUpstreamPricingRemoteGroupsPreserveWhitespace(t *testing.T) {
 	c.GroupID = "6"
 	_, err = r.Fetch(context.Background(), c)
 	require.Error(t, err)
+}
+
+func TestUpstreamPricingSub2APIModelPriceSourceUsesBillingGroupMultiplier(t *testing.T) {
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/groups/available":
+			fmt.Fprint(w, `{"data":[{"id":8,"name":"Pro Max","rate_multiplier":0.3},{"id":9,"name":"Pro Peak","rate_multiplier":0.4,"peak_rate_enabled":true}]}`)
+		case "/api/v1/groups/rates":
+			fmt.Fprint(w, `{"data":{"8":0.24}}`)
+		case "/api/v1/model-plaza":
+			fmt.Fprint(w, `{"data":{"groups":[{"id":5,"name":"Enterprise","rate_multiplier":0.5,"user_rate_multiplier":0.6,"peak_rate_enabled":true,"models":[{"name":"model","pricing":{"billing_mode":"token","input_price":0.000002,"output_price":0.000008}}]}]}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer site.Close()
+	ctx := context.Background()
+	remote := NewRemote("")
+	cfg := Config{Provider: "sub2api", BaseURL: site.URL, Token: "synthetic-panel-token", Group: "Pro Max", GroupID: "8"}
+
+	groups, err := remote.ModelPriceGroups(ctx, cfg)
+	require.NoError(t, err)
+	require.Equal(t, []ModelPriceGroup{{ID: "5", Name: "Enterprise"}}, groups)
+
+	_, err = remote.Fetch(ctx, cfg)
+	require.ErrorContains(t, err, "站点未公布所选计费分组")
+
+	cfg.ModelPriceGroupID = "5"
+	catalog, err := remote.Fetch(ctx, cfg)
+	require.NoError(t, err)
+	require.Equal(t, &groups[0], catalog.ModelPriceGroup)
+	require.Equal(t, Group{ID: "8", Name: "Pro Max", Multiplier: "0.24"}, catalog.Group)
+	require.Equal(t, "2", *catalog.Models[0].Input)
+	estimate := Calculate(catalog, Usage{Model: "model", Input: 1000000})
+	require.Equal(t, "estimated", estimate.Status)
+	require.Equal(t, "0.48", *estimate.Amount)
+
+	cfg.Group, cfg.GroupID = "Pro Peak", "9"
+	catalog, err = remote.Fetch(ctx, cfg)
+	require.NoError(t, err)
+	require.Equal(t, 1, catalog.Unsupported)
+
+	cfg.ModelPriceGroupID = "6"
+	_, err = remote.Fetch(ctx, cfg)
+	require.ErrorContains(t, err, "所选模型价格来源分组已不在模型广场")
 }
 
 func TestUpstreamPricingNewAPIAccessTokenMultiplier(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -45,6 +46,9 @@ func ValidateConfig(c *Config) error {
 	}
 	if len(c.Group) > 120 || len(c.GroupID) > 120 || len(c.UserID) > 32 || strings.ContainsAny(c.UserID, "\r\n") {
 		return safeError("分组或站点用户 ID 无效")
+	}
+	if c.ModelPriceGroupID != "" && (c.Provider != "sub2api" || !validModelPriceGroupID(c.ModelPriceGroupID)) {
+		return safeError("模型价格来源分组无效")
 	}
 	if c.Provider == "newapi" && c.UserID != "" {
 		for _, ch := range c.UserID {
@@ -190,7 +194,7 @@ func (r *Remote) Groups(ctx context.Context, c Config) ([]Group, error) {
 		if err != nil || ratio == nil {
 			return nil, safeError("缺少有效的分组或用户专属倍率")
 		}
-		out = append(out, Group{ID: id, Name: name, Multiplier: *ratio})
+		out = append(out, Group{ID: id, Name: name, Multiplier: *ratio, peakRateEnabled: g["peak_rate_enabled"] == true})
 	}
 	return out, nil
 }
@@ -227,7 +231,7 @@ func (r *Remote) Fetch(ctx context.Context, c Config) (Catalog, error) {
 		if err != nil {
 			return cat, err
 		}
-		cat, err = NormalizeSub2API(v, *selected)
+		cat, err = NormalizeSub2API(v, *selected, c.ModelPriceGroupID)
 		if err != nil {
 			return cat, err
 		}
@@ -328,15 +332,50 @@ func NormalizeNewAPI(v map[string]any, g Group) (Catalog, error) {
 	return cat, nil
 }
 
-func NormalizeSub2API(v map[string]any, g Group) (Catalog, error) {
+func validModelPriceGroupID(value string) bool {
+	id, err := strconv.ParseInt(value, 10, 64)
+	return err == nil && id > 0 && strconv.FormatInt(id, 10) == value
+}
+
+func modelPlazaGroups(v map[string]any) ([]any, error) {
 	a, ok := object(v["data"])["groups"].([]any)
 	if !ok || len(a) > 1000 {
-		return Catalog{}, safeError("Sub2API 模型广场结构不兼容")
+		return nil, safeError("Sub2API 模型广场结构不兼容")
+	}
+	return a, nil
+}
+
+func (r *Remote) ModelPriceGroups(ctx context.Context, c Config) ([]ModelPriceGroup, error) {
+	v, err := r.get(ctx, c, "/api/v1/model-plaza")
+	if err != nil {
+		return nil, err
+	}
+	groups, err := modelPlazaGroups(v)
+	if err != nil {
+		return nil, err
+	}
+	out := []ModelPriceGroup{}
+	for _, row := range groups {
+		g := object(row)
+		id, name := stringValue(g["id"]), stringValue(g["name"])
+		if validModelPriceGroupID(id) && validName(strings.TrimSpace(name)) && len(array(g["models"])) > 0 {
+			out = append(out, ModelPriceGroup{ID: id, Name: name})
+		}
+	}
+	return out, nil
+}
+
+func NormalizeSub2API(v map[string]any, g Group, modelPriceGroupID string) (Catalog, error) {
+	groups, err := modelPlazaGroups(v)
+	if err != nil {
+		return Catalog{}, err
 	}
 	var selected map[string]any
-	for _, item := range a {
+	for _, item := range groups {
 		m := object(item)
-		if stringValue(m["name"]) == g.Name && (g.ID == "" || stringValue(m["id"]) == g.ID) {
+		id := stringValue(m["id"])
+		matchesBillingGroup := stringValue(m["name"]) == g.Name && (g.ID == "" || id == g.ID)
+		if (modelPriceGroupID == "" && matchesBillingGroup) || (modelPriceGroupID != "" && id == modelPriceGroupID) {
 			if selected != nil {
 				return Catalog{}, safeError("模型广场分组不唯一")
 			}
@@ -344,16 +383,27 @@ func NormalizeSub2API(v map[string]any, g Group) (Catalog, error) {
 		}
 	}
 	if selected == nil {
-		return Catalog{}, safeError("站点未公布所选分组的模型价格；未导入其他分组")
+		if modelPriceGroupID != "" {
+			return Catalog{}, safeError("所选模型价格来源分组已不在模型广场中，请重新读取并选择")
+		}
+		return Catalog{}, safeError("站点未公布所选计费分组的模型价格，可选择模型价格来源分组")
 	}
 	models, ok := selected["models"].([]any)
 	if !ok || len(models) > 10000 {
 		return Catalog{}, safeError("所选分组模型目录结构不兼容")
 	}
+	if modelPriceGroupID != "" && len(models) == 0 {
+		return Catalog{}, safeError("所选模型价格来源分组没有公布模型目录")
+	}
 	if _, err := decimal(g.Multiplier); err != nil {
 		return Catalog{}, err
 	}
 	cat := Catalog{Group: g, Models: []Price{}, RemoteVersion: "sub2api-model-plaza"}
+	if modelPriceGroupID != "" {
+		cat.ModelPriceGroup = &ModelPriceGroup{ID: modelPriceGroupID, Name: stringValue(selected["name"])}
+	}
+	// The multiplier and peak-rate policy belong to the billing group.
+	peakRateEnabled := g.peakRateEnabled || ((modelPriceGroupID == "" || modelPriceGroupID == g.ID) && selected["peak_rate_enabled"] == true)
 	for _, row := range models {
 		m := object(row)
 		p := Price{Model: stringValue(m["name"]), Mode: "unavailable"}
@@ -364,7 +414,7 @@ func NormalizeSub2API(v map[string]any, g Group) (Catalog, error) {
 		switch {
 		case pricing == nil:
 			p.Reason = "站点未提供实付单价，参考价格未自动代用"
-		case selected["peak_rate_enabled"] == true:
+		case peakRateEnabled:
 			p.Reason = "此分组有峰谷倍率，尚未适配"
 		case m["time_pricing"] != nil || pricing["time_pricing"] != nil:
 			p.Reason = "此模型有分时计价，尚未适配"

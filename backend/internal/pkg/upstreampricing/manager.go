@@ -85,6 +85,17 @@ func (m *Manager) Groups(ctx context.Context, id int64, c Config) ([]Group, erro
 	return m.Remote.Groups(ctx, c)
 }
 
+func (m *Manager) ModelPriceGroups(ctx context.Context, id int64, c Config) ([]ModelPriceGroup, error) {
+	if c.Provider != "sub2api" {
+		return nil, safeError("模型价格来源分组仅适用于 Sub2API")
+	}
+	c, _, _, _, err := m.prepare(ctx, id, c)
+	if err != nil {
+		return nil, err
+	}
+	return m.Remote.ModelPriceGroups(ctx, c)
+}
+
 func (m *Manager) Preview(ctx context.Context, id, revision int64, c Config) (Preview, error) {
 	c, src, credential, fp, err := m.prepare(ctx, id, c)
 	if err != nil {
@@ -156,7 +167,7 @@ func (m *Manager) RollbackPreview(ctx context.Context, id, version int64) (Previ
 	}
 	for _, v := range versions {
 		if v.ID == version {
-			if v.Config.Provider != src.Config.Provider || v.Config.BaseURL != src.Config.BaseURL || v.Config.UserID != src.Config.UserID || v.Config.Group != src.Config.Group || v.Config.GroupID != src.Config.GroupID || fp != src.AccountFingerprint || v.AccountFingerprint != fp {
+			if !samePricingGroup(v.Config, src.Config) || fp != src.AccountFingerprint || v.AccountFingerprint != fp {
 				return Preview{}, safeError("仅可回滚当前账号与相同站点、分组的价格版本")
 			}
 			c := v.Config

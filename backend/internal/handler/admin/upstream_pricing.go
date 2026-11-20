@@ -111,6 +111,27 @@ func (h *UpstreamPricingHandler) Groups(c *gin.Context) {
 	}
 	response.Success(c, groups)
 }
+
+func (h *UpstreamPricingHandler) ModelPriceGroups(c *gin.Context) {
+	id, ok := h.account(c)
+	if !ok {
+		return
+	}
+	var body pricingCandidate
+	if c.ShouldBindJSON(&body) != nil {
+		response.BadRequest(c, "请求格式无效")
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 50*time.Second)
+	defer cancel()
+	groups, err := h.pricing.ModelPriceGroups(ctx, id, body.Config)
+	if err != nil {
+		pricingError(c, err)
+		return
+	}
+	response.Success(c, groups)
+}
+
 func (h *UpstreamPricingHandler) Preview(c *gin.Context) {
 	id, ok := h.account(c)
 	if !ok {

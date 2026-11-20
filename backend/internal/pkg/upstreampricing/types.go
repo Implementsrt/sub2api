@@ -14,22 +14,29 @@ import (
 )
 
 type Config struct {
-	Provider        string  `json:"provider"`
-	BaseURL         string  `json:"base_url"`
-	Token           string  `json:"token,omitempty"`
-	BrowserImportID string  `json:"browser_import_id,omitempty"`
-	UserID          string  `json:"user_id,omitempty"`
-	Group           string  `json:"group"`
-	GroupID         string  `json:"group_id,omitempty"`
-	Automatic       bool    `json:"automatic"`
-	IntervalMinutes int     `json:"interval_minutes"`
-	Overrides       []Price `json:"overrides,omitempty"`
+	Provider          string  `json:"provider"`
+	BaseURL           string  `json:"base_url"`
+	Token             string  `json:"token,omitempty"`
+	BrowserImportID   string  `json:"browser_import_id,omitempty"`
+	UserID            string  `json:"user_id,omitempty"`
+	Group             string  `json:"group"`
+	GroupID           string  `json:"group_id,omitempty"`
+	ModelPriceGroupID string  `json:"model_price_group_id,omitempty"`
+	Automatic         bool    `json:"automatic"`
+	IntervalMinutes   int     `json:"interval_minutes"`
+	Overrides         []Price `json:"overrides,omitempty"`
 }
 
 type Group struct {
-	ID         string `json:"id,omitempty"`
-	Name       string `json:"name"`
-	Multiplier string `json:"multiplier"`
+	ID              string `json:"id,omitempty"`
+	Name            string `json:"name"`
+	Multiplier      string `json:"multiplier"`
+	peakRateEnabled bool
+}
+
+type ModelPriceGroup struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // Prices are USD per million tokens, before the upstream group multiplier.
@@ -50,12 +57,13 @@ type Price struct {
 }
 
 type Catalog struct {
-	Group         Group   `json:"group"`
-	Models        []Price `json:"models"`
-	RemoteVersion string  `json:"remote_version,omitempty"`
-	Supported     int     `json:"supported"`
-	Unsupported   int     `json:"unsupported"`
-	Fingerprint   string  `json:"fingerprint"`
+	Group           Group            `json:"group"`
+	ModelPriceGroup *ModelPriceGroup `json:"model_price_group,omitempty"`
+	Models          []Price          `json:"models"`
+	RemoteVersion   string           `json:"remote_version,omitempty"`
+	Supported       int              `json:"supported"`
+	Unsupported     int              `json:"unsupported"`
+	Fingerprint     string           `json:"fingerprint"`
 }
 
 type Usage struct {

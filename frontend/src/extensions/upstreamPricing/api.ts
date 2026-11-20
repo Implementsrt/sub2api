@@ -1,5 +1,5 @@
 import { apiClient } from '@/api/client'
-import type { PricingConfig, PricingGroup, PricingState, Preview, PricingComparison, BrowserImportStart, BrowserImportStatus, ActivityState } from '.'
+import type { PricingConfig, PricingGroup, PricingState, Preview, PricingComparison, BrowserImportStart, BrowserImportStatus, ActivityState, ModelPriceGroup } from '.'
 
 const path = (id: number) => `/admin/upstream-pricing/accounts/${id}`
 export const upstreamPricingAPI = {
@@ -19,6 +19,9 @@ export const upstreamPricingAPI = {
   async get(id: number, signal?: AbortSignal) { return (await apiClient.get<PricingState>(path(id), { signal })).data },
   async groups(id: number, revision: number, config: PricingConfig, signal?: AbortSignal) {
     return (await apiClient.post<PricingGroup[]>(`${path(id)}/groups`, { revision, config }, { signal, timeout: 65000 })).data
+  },
+  async modelPriceGroups(id: number, config: PricingConfig, signal?: AbortSignal) {
+    return (await apiClient.post<ModelPriceGroup[]>(`${path(id)}/model-price-groups`, { config }, { signal, timeout: 65000 })).data
   },
   async preview(id: number, revision: number, config: PricingConfig, signal?: AbortSignal) {
     return (await apiClient.post<Preview>(`${path(id)}/preview`, { revision, config }, { signal, timeout: 70000 })).data

@@ -5,7 +5,7 @@ import { formatUpstreamAmount, type PricingState, type Preview, type UpstreamEst
 import UpstreamEstimateCell from './UpstreamEstimateCell.vue'
 import UpstreamPricingPanel from './UpstreamPricingPanel.vue'
 
-const api = vi.hoisted(() => ({ get: vi.fn(), groups: vi.fn(), preview: vi.fn(), apply: vi.fn(), sync: vi.fn(), schedule: vi.fn(), rollback: vi.fn() }))
+const api = vi.hoisted(() => ({ get: vi.fn(), groups: vi.fn(), modelPriceGroups: vi.fn(), preview: vi.fn(), apply: vi.fn(), sync: vi.fn(), schedule: vi.fn(), rollback: vi.fn() }))
 vi.mock('./api', () => ({ upstreamPricingAPI: api }))
 const i18n = () => createI18n({ legacy: false, locale: 'zh', messages: { zh: {} } })
 function state(): PricingState {
@@ -85,6 +85,30 @@ describe('upstream pricing configuration', () => {
     await button(wrapper, '读取可用分组').trigger('click'); await flushPromises()
     expect(button(wrapper, '预览价格差异').attributes()).toHaveProperty('disabled')
     expect(api.apply).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('previews a selected model price source with the original billing group', async () => {
+    const saved = state()
+    const proMax = { id: '8', name: 'Pro Max', multiplier: '0.24' }
+    const enterprise = { id: '5', name: '企业' }
+    Object.assign(saved.source.config, { provider: 'sub2api', group: proMax.name, group_id: proMax.id })
+    api.get.mockResolvedValue(saved)
+    api.modelPriceGroups.mockResolvedValue([enterprise])
+    api.preview.mockResolvedValue({
+      id: 'preview-id', catalog: { ...saved.catalog, group: proMax, model_price_group: enterprise }, added: 0, changed: 1, removed: 0,
+    })
+    const wrapper = panel(); await flushPromises()
+    await button(wrapper, '读取模型广场分组').trigger('click'); await flushPromises()
+    const source = wrapper.findAll('select').find(select => select.find('option[value="5"]').exists())!
+    await source.setValue(enterprise.id)
+    await button(wrapper, '预览价格差异').trigger('click'); await flushPromises()
+    expect(api.preview).toHaveBeenCalledWith(7, 1, expect.objectContaining({
+      group: proMax.name, group_id: proMax.id, model_price_group_id: enterprise.id,
+    }), expect.any(AbortSignal))
+    expect(wrapper.text()).toContain('模型价格来源分组 · 企业')
+    expect(wrapper.text()).toContain('上游分组倍率 0.24x')
+    await source.setValue('')
+    expect(wrapper.findAll('button').some(v => v.text() === '应用此预览')).toBe(false)
     wrapper.unmount()
   })
   it('preserves the last applied catalog after an upstream error', async () => {
