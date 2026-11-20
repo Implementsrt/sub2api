@@ -57,6 +57,45 @@ func TestActivityWalletValidation(t *testing.T) {
 	}
 }
 
+func TestActivityNewAPIWallet(t *testing.T) {
+	for _, tt := range []struct {
+		name, user, status, balance string
+	}{
+		{"remaining quota", `{"data":{"quota":2469,"used_quota":11}}`, `{"data":{"quota_per_unit":2000}}`, "1.2345"},
+		{"zero", `{"data":{"quota":0}}`, `{"data":{"quota_per_unit":500000}}`, "0"},
+		{"negative", `{"data":{"quota":"-1"}}`, `{"data":{"quota_per_unit":"500000"}}`, "-0.000002"},
+		{"missing quota", `{"data":{"used_quota":10}}`, `{"data":{"quota_per_unit":500000}}`, ""},
+		{"missing conversion", `{"data":{"quota":10}}`, `{"data":{}}`, ""},
+		{"invalid conversion", `{"data":{"quota":10}}`, `{"data":{"quota_per_unit":0}}`, ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/api/user/self":
+					require.Equal(t, "Bearer synthetic-panel", r.Header.Get("Authorization"))
+					require.Equal(t, "42", r.Header.Get("New-Api-User"))
+					_, _ = w.Write([]byte(tt.user))
+				case "/api/status":
+					_, _ = w.Write([]byte(tt.status))
+				default:
+					t.Errorf("unexpected wallet path: %s", r.URL.Path)
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+			balance, err := NewRemote("").wallet(context.Background(), Config{
+				Provider: "newapi", BaseURL: server.URL, Token: "synthetic-panel", UserID: "42",
+			})
+			if tt.balance == "" {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tt.balance, balance)
+		})
+	}
+}
+
 func TestActivityIdentityIgnoresPriceRevision(t *testing.T) {
 	src := &Source{Revision: 1, AccountFingerprint: "fp", Credential: "encrypted", Config: Config{Provider: "sub2api", BaseURL: "https://station.example", Group: "g", GroupID: "1"}}
 	first := activityIdentity(src)

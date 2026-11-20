@@ -9,7 +9,7 @@
       <button type="button" class="btn" :class="forkPricingTab ? 'btn-secondary' : 'btn-primary'" @click="forkPricingTab = false">{{ upstreamPricingLabels.account }}</button>
       <button type="button" class="btn" :class="forkPricingTab ? 'btn-primary' : 'btn-secondary'" @click="forkPricingTab = true">{{ upstreamPricingLabels.tab }}</button>
     </div>
-    <UpstreamPricingPanel v-if="show && account?.type === 'apikey' && forkPricingTab" :key="account.id" :account-id="account.id" :default-base-url="String(account.credentials?.base_url || '')" />
+    <UpstreamPricingPanel v-if="show && account?.type === 'apikey' && forkPricingTab" :key="account.id" :account-id="account.id" :default-base-url="String(account.credentials?.base_url || '')" @changed="emit('upstream-pricing-changed')" />
     <form
       v-if="account"
       v-show="!forkPricingTab"
@@ -3542,6 +3542,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   close: []
   updated: [account: Account]
+  'upstream-pricing-changed': []
 }>()
 
 const { t } = useI18n()

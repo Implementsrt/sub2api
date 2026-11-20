@@ -1132,9 +1132,15 @@ export interface UpstreamBillingProbeResult {
   error?: string
 }
 
+export interface NewAPIGroupRate {
+  name: string
+  multiplier: string
+}
+
 export interface UpstreamBillingRateSnapshotItem {
   account_id: number
   snapshot?: UpstreamBillingProbeSnapshot | null
+  newapi_group_rate?: NewAPIGroupRate
 }
 
 export interface UpstreamBillingRatesResponse {
@@ -1279,6 +1285,7 @@ export interface Account {
   credentials_status?: Record<string, boolean>
   ollama_cloud_usage?: OllamaCloudUsageState
   opencode_go_usage?: OpenCodeGoUsageState
+  newapi_group_rate?: NewAPIGroupRate
   // Extra fields including Codex usage, OpenAI compact capability, and model-level rate limits.
   extra?: (CodexUsageSnapshot & OpenAICompactState & {
     model_rate_limits?: Record<string, { rate_limited_at: string; rate_limit_reset_at: string }>

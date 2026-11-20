@@ -1,5 +1,15 @@
 <template>
-  <div v-if="eligible" class="flex h-6 min-w-[7rem] items-center gap-1">
+  <div v-if="eligible && account.newapi_group_rate" class="flex h-6 min-w-[7rem] items-center gap-1">
+    <HelpTooltip class="-ml-1" width-class="w-max max-w-[calc(100vw-2rem)]">
+      <template #trigger>
+        <span class="cursor-help border-b border-dotted border-gray-300 font-mono text-sm font-medium text-gray-800 dark:border-dark-600 dark:text-gray-200" data-testid="upstream-billing-rate">
+          {{ account.newapi_group_rate.multiplier }}x
+        </span>
+      </template>
+      {{ t('admin.accounts.upstreamBilling.newAPIGroup', { group: account.newapi_group_rate.name }) }}
+    </HelpTooltip>
+  </div>
+  <div v-else-if="eligible" class="flex h-6 min-w-[7rem] items-center gap-1">
     <HelpTooltip class="-ml-1" width-class="w-max max-w-[calc(100vw-2rem)]" data-testid="upstream-billing-details">
       <template #trigger>
         <span

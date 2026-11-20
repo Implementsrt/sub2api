@@ -1,6 +1,8 @@
 <template>
   <div class="text-xs" :title="walletDetails(state, failed)">
     <span v-if="state?.wallet_balance != null" class="whitespace-nowrap font-medium tabular-nums" :class="Number(state.wallet_balance) < 0 ? 'text-red-600' : 'text-gray-700 dark:text-gray-300'">${{ state.wallet_balance }}</span>
+    <span v-else-if="state?.configured === false" class="text-gray-400">未连接</span>
+    <span v-else-if="state?.wallet_error || failed" class="text-amber-600">读取失败</span>
     <span v-else class="text-gray-400">—</span>
     <span v-if="state?.wallet_balance != null && (failed || state.wallet_error || stale)" class="ml-1 text-amber-600">旧值</span>
     <p v-if="enabled && state?.configured && !state.wallet_checked_at && !state.wallet_error" class="mt-0.5 text-gray-400">等待首次同步</p>

@@ -349,6 +349,7 @@ export default {
         failed: 'Failed',
         notProbed: 'Not probed',
         groupRate: 'Group default: {value}x',
+        newAPIGroup: 'Applied New API pricing group: {group}',
         userRate: 'User rate: {value}x',
         peakRate: 'Peak: {start}-{end}, {value}x ({timezone})',
         noPeakRate: 'Peak rate: disabled',

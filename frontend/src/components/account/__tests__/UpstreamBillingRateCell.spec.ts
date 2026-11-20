@@ -68,6 +68,18 @@ describe('UpstreamBillingRateCell', () => {
     vi.useRealTimers()
   })
 
+  it('shows the applied New API group ratio even if the legacy probe was unsupported', () => {
+    const account = makeAccount({
+      newapi_group_rate: { name: 'station-group', multiplier: '0' },
+      extra: {
+        upstream_billing_probe: { status: 'unsupported', last_attempt_at: '', next_probe_at: '' }
+      }
+    })
+    const wrapper = mount(UpstreamBillingRateCell, { props: { account, now: Date.now() } })
+    expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toBe('0x')
+    expect(wrapper.find('[data-testid="upstream-billing-probe"]').exists()).toBe(false)
+  })
+
   it('recomputes the current effective rate and keeps the icon-only probe action', async () => {
     const wrapper = mount(UpstreamBillingRateCell, {
       props: {

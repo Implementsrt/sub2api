@@ -96,7 +96,11 @@ func (r *Remote) activityRecords(ctx context.Context, c Config, start, end time.
 }
 
 func (r *Remote) wallet(ctx context.Context, c Config) (string, error) {
-	if c.Provider != "sub2api" {
+	switch c.Provider {
+	case "newapi":
+		return r.newAPIWallet(ctx, c)
+	case "sub2api":
+	default:
 		return "", safeError("当前站点类型暂不支持钱包余额查询")
 	}
 	v, err := r.get(ctx, c, "/api/v1/auth/me?timezone=Asia%2FShanghai")
@@ -104,20 +108,50 @@ func (r *Remote) wallet(ctx context.Context, c Config) (string, error) {
 		return "", err
 	}
 	text := stringValue(object(v["data"])["balance"])
-	if len(text) == 0 || len(text) > 80 || !walletNumberPattern.MatchString(text) {
+	if parseWalletNumber(text) == nil {
 		return "", safeError("站点未返回有效的钱包余额")
+	}
+	return text, nil
+}
+
+func (r *Remote) newAPIWallet(ctx context.Context, c Config) (string, error) {
+	user, err := r.get(ctx, c, "/api/user/self")
+	if err != nil {
+		return "", err
+	}
+	quota := parseWalletNumber(stringValue(object(user["data"])["quota"]))
+	if quota == nil || !quota.IsInt() {
+		return "", safeError("New API 未返回有效的剩余额度")
+	}
+	status, err := r.get(ctx, c, "/api/status")
+	if err != nil {
+		return "", err
+	}
+	unit := parseWalletNumber(stringValue(object(status["data"])["quota_per_unit"]))
+	if unit == nil || unit.Sign() <= 0 {
+		return "", safeError("New API 未公布有效的额度换算比例")
+	}
+	balance := format(quota.Quo(quota, unit), 18)
+	if balance == "-0" {
+		balance = "0"
+	}
+	return balance, nil
+}
+
+func parseWalletNumber(text string) *big.Rat {
+	if len(text) == 0 || len(text) > 80 || !walletNumberPattern.MatchString(text) {
+		return nil
 	}
 	// Bound scientific exponents before big.Rat allocates their expanded value.
 	if i := strings.IndexAny(text, "eE"); i >= 0 {
 		exponent, parseErr := strconv.Atoi(text[i+1:])
 		if parseErr != nil || exponent < -40 || exponent > 40 {
-			return "", safeError("站点钱包余额超出支持范围")
+			return nil
 		}
 	}
 	value, ok := new(big.Rat).SetString(text)
 	if !ok || len(value.Num().String()) > 100 || len(value.Denom().String()) > 100 {
-		return "", safeError("站点未返回有效的钱包余额")
+		return nil
 	}
-	// Negative and zero balances are legitimate; never turn missing data into zero.
-	return text, nil
+	return value
 }

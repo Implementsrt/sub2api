@@ -63,19 +63,30 @@ func (m *Manager) syncActivity(ctx context.Context, id int64, now time.Time) (er
 	if err = ValidateConfig(&c); err != nil {
 		return err
 	}
+	identity := activityIdentity(src)
 	c.Token, err = m.Cipher.Decrypt(src.Credential)
 	if err != nil {
-		return safeError("面板凭证无法解密")
+		message := "面板凭证无法解密，请重新填写并应用上游定价配置"
+		return m.Store.publishActivity(ctx, src, token, identity, now, nil, nil, nil, message, message)
 	}
 	state, err := m.Store.activityState(ctx, id)
 	if err != nil {
 		return err
 	}
-	identity := activityIdentity(src)
 	start, end := activityWindow(now, state.LastSuccess, state.Identity == identity)
 	active, err := m.Store.activityHasCalls(ctx, id, start, end)
 	if err != nil {
 		return err
+	}
+	// Reserve time to publish the wallet snapshot even if log pagination times out.
+	var balance *string
+	walletError := ""
+	value, walletErr := m.Remote.wallet(ctx, c)
+	if walletErr == nil {
+		balance = &value
+	} else {
+		message, _ := PublicMessage(walletErr)
+		walletError = "钱包刷新失败：" + message
 	}
 	var records []TimingRecord
 	var through *time.Time
@@ -88,24 +99,15 @@ func (m *Manager) syncActivity(ctx context.Context, id int64, now time.Time) (er
 		if queryStart.Before(midnight) {
 			queryStart = midnight
 		}
-		records, err = m.Remote.activityRecords(ctx, c, queryStart, end)
+		detailCtx, cancel := context.WithTimeout(ctx, 80*time.Second)
+		records, err = m.Remote.activityRecords(detailCtx, c, queryStart, end)
+		cancel()
 		if err == nil {
 			through = &end
 		} else {
 			detailError = "明细同步失败，保留上次成功进度，下个周期重试"
 			records = nil
 		}
-	}
-	// Wallet freshness is independent of local inference activity and price sync.
-	var balance *string
-	walletError := ""
-	value, walletErr := m.Remote.wallet(ctx, c)
-	if walletErr == nil {
-		balance = &value
-	} else if c.Provider != "sub2api" {
-		walletError = "当前站点类型暂不支持钱包余额查询"
-	} else {
-		walletError = "钱包刷新失败，请检查面板凭证和站点接口"
 	}
 	return m.Store.publishActivity(ctx, src, token, identity, now, through, records, balance, walletError, detailError)
 }

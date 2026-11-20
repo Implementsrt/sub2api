@@ -118,6 +118,7 @@ import type { BrowserImportStatus } from '.'
 import { blankPrice, useUpstreamPricingLabels, type Catalog, type ModelPriceGroup, type Price, type Preview, type PricingConfig, type PricingGroup, type PricingState } from '.'
 
 const props = defineProps<{ accountId: number; defaultBaseUrl?: string }>()
+const emit = defineEmits<{ changed: [] }>()
 const labels = useUpstreamPricingLabels()
 const state = ref<PricingState | null>(null)
 const groups = ref<PricingGroup[]>([])
@@ -211,9 +212,14 @@ function makePreview() { return run(async () => { const value = await upstreamPr
 function applyPreview() { return run(async () => {
   if (!preview.value) return
   await upstreamPricingAPI.apply(props.accountId, preview.value.id, controller.signal)
+  if (alive) emit('changed')
   await load(); if (alive) { preview.value = null; notice.value = labels.value.saved }
 }) }
-function syncSaved() { return run(async () => { await upstreamPricingAPI.sync(props.accountId, controller.signal); await load() }) }
+function syncSaved() { return run(async () => {
+  await upstreamPricingAPI.sync(props.accountId, controller.signal)
+  if (alive) emit('changed')
+  await load()
+}) }
 function saveSchedule() { return run(async () => { await upstreamPricingAPI.schedule(props.accountId, form.automatic, form.interval_minutes, controller.signal); await load() }) }
 function rollback(version: number) { return run(async () => { const value = await upstreamPricingAPI.rollback(props.accountId, version, controller.signal); if (alive) preview.value = value }) }
 onMounted(() => { void run(load) })

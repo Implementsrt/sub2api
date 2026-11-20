@@ -133,8 +133,9 @@ type UpstreamBillingProbeResult struct {
 // account table's background refresh. It intentionally excludes credentials,
 // runtime counters, and usage data from the response.
 type UpstreamBillingRateSnapshotItem struct {
-	AccountID int64                         `json:"account_id"`
-	Snapshot  *UpstreamBillingProbeSnapshot `json:"snapshot"`
+	AccountID       int64                         `json:"account_id"`
+	Snapshot        *UpstreamBillingProbeSnapshot `json:"snapshot"`
+	NewAPIGroupRate *NewAPIGroupRate              `json:"newapi_group_rate,omitempty"`
 }
 
 // BuildUpstreamBillingRateSnapshotItems projects account rows into the
@@ -151,8 +152,9 @@ func BuildUpstreamBillingRateSnapshotItems(accounts []Account) []UpstreamBilling
 			snapshot = decodeUpstreamBillingProbeSnapshot(account.Extra)
 		}
 		items = append(items, UpstreamBillingRateSnapshotItem{
-			AccountID: account.ID,
-			Snapshot:  snapshot,
+			AccountID:       account.ID,
+			Snapshot:        snapshot,
+			NewAPIGroupRate: account.NewAPIGroupRate,
 		})
 	}
 	return items

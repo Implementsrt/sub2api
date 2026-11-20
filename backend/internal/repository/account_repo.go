@@ -1147,7 +1147,15 @@ func (r *accountRepository) ListWithFilters(ctx context.Context, params paginati
 	accountsQuery := q.
 		Offset(params.Offset()).
 		Limit(params.Limit())
-	for _, order := range accountListOrder(params) {
+	sortByUpstreamRate := strings.EqualFold(strings.TrimSpace(params.SortBy), "upstream_billing_rate")
+	var newAPIGroups map[int64]activeNewAPIGroup
+	if sortByUpstreamRate && total > 0 {
+		newAPIGroups, err = r.activeNewAPIGroups(ctx, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	for _, order := range accountListOrder(params, newAPIGroups) {
 		accountsQuery = accountsQuery.Order(order)
 	}
 
@@ -1160,6 +1168,19 @@ func (r *accountRepository) ListWithFilters(ctx context.Context, params paginati
 	if err != nil {
 		return nil, nil, err
 	}
+	if !sortByUpstreamRate {
+		ids := make([]int64, 0, len(outAccounts))
+		for _, account := range outAccounts {
+			if account.Type == service.AccountTypeAPIKey {
+				ids = append(ids, account.ID)
+			}
+		}
+		newAPIGroups, err = r.activeNewAPIGroups(ctx, ids)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	assignNewAPIGroups(outAccounts, newAPIGroups)
 	return outAccounts, paginationResultFromTotal(int64(total), params), nil
 }
 
@@ -1206,7 +1227,7 @@ func (r *accountRepository) ListOpsAccountsForStats(ctx context.Context, platfor
 	return r.accountsToService(ctx, accounts)
 }
 
-func accountListOrder(params pagination.PaginationParams) []func(*entsql.Selector) {
+func accountListOrder(params pagination.PaginationParams, newAPIGroups map[int64]activeNewAPIGroup) []func(*entsql.Selector) {
 	sortBy := strings.ToLower(strings.TrimSpace(params.SortBy))
 	sortOrder := params.NormalizedSortOrder(pagination.SortOrderAsc)
 	if sortBy == "upstream_billing_rate" {
@@ -1219,7 +1240,7 @@ func accountListOrder(params pagination.PaginationParams) []func(*entsql.Selecto
 		return []func(*entsql.Selector){func(s *entsql.Selector) {
 			extra := s.C(dbaccount.FieldExtra)
 			expression := upstreamBillingRateSortExpression(extra)
-			s.OrderExpr(entsql.Expr(expression + " " + direction + " NULLS LAST"))
+			orderByUpstreamBillingRate(s, newAPIGroups, expression, direction, s.C(dbaccount.FieldID))
 			s.OrderBy(tieOrder(s.C(dbaccount.FieldID)))
 		}}
 	}

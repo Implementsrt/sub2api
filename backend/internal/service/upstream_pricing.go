@@ -12,15 +12,21 @@ import (
 
 type UpstreamPricingService struct{ *upstreampricing.Manager }
 
-func NewUpstreamPricingService(db *sql.DB, cfg *config.Config, cipher SecretEncryptor, repo UsageLogRepository) *UpstreamPricingService {
-	m := upstreampricing.NewManager(&upstreampricing.Store{DB: db}, upstreampricing.NewRemote(cfg.Update.ProxyURL), cipher)
+type NewAPIGroupRate = upstreampricing.Group
+
+func NewUpstreamPricingService(db *sql.DB, cfg *config.Config, legacy SecretEncryptor, repo UsageLogRepository) (*UpstreamPricingService, error) {
+	credentials, err := upstreampricing.NewCredentialCipher(cfg.JWT.Secret, legacy)
+	if err != nil {
+		return nil, err
+	}
+	m := upstreampricing.NewManager(&upstreampricing.Store{DB: db}, upstreampricing.NewRemote(cfg.Update.ProxyURL), credentials)
 	if extension, ok := repo.(interface {
 		SetUpstreamPricing(*upstreampricing.Manager)
 	}); ok {
 		extension.SetUpstreamPricing(m)
 	}
 	m.Start()
-	return &UpstreamPricingService{Manager: m}
+	return &UpstreamPricingService{Manager: m}, nil
 }
 
 func submitUpstreamPricing(repo UsageLogRepository, row *UsageLog) {

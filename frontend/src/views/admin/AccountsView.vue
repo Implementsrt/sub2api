@@ -456,7 +456,7 @@
       <template #pagination><Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" /></template>
     </TablePageLayout>
     <CreateAccountModal :show="showCreate" :proxies="proxies" :groups="groups" @close="showCreate = false" @created="reload" />
-    <EditAccountModal :show="showEdit" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
+    <EditAccountModal :show="showEdit" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" @upstream-pricing-changed="refreshUpstreamBillingRates(true)" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
@@ -1253,14 +1253,18 @@ const applyUpstreamBillingRateSnapshots = async (
     if (!item) return account
     const nextSnapshot = item.snapshot ?? null
     const previousSnapshot = account.extra?.upstream_billing_probe ?? null
-    if (JSON.stringify(previousSnapshot) === JSON.stringify(nextSnapshot)) return account
+    const snapshotChanged = JSON.stringify(previousSnapshot) !== JSON.stringify(nextSnapshot)
+    if (!snapshotChanged &&
+        account.newapi_group_rate?.name === item.newapi_group_rate?.name &&
+        account.newapi_group_rate?.multiplier === item.newapi_group_rate?.multiplier) return account
 
     const nextExtra = { ...(account.extra ?? {}) }
     if (nextSnapshot) nextExtra.upstream_billing_probe = nextSnapshot
     else delete nextExtra.upstream_billing_probe
     const nextAccount = {
       ...account,
-      ...(typeof nextSnapshot?.synced_rate_multiplier === 'number'
+      newapi_group_rate: item.newapi_group_rate,
+      ...(snapshotChanged && typeof nextSnapshot?.synced_rate_multiplier === 'number'
         ? { rate_multiplier: nextSnapshot.synced_rate_multiplier }
         : {}),
       extra: nextExtra
@@ -1438,6 +1442,8 @@ const shouldReplaceAutoRefreshRow = (current: Account, next: Account) => {
     current.rate_limit_reset_at !== next.rate_limit_reset_at ||
     current.overload_until !== next.overload_until ||
     current.temp_unschedulable_until !== next.temp_unschedulable_until ||
+    current.newapi_group_rate?.name !== next.newapi_group_rate?.name ||
+    current.newapi_group_rate?.multiplier !== next.newapi_group_rate?.multiplier ||
     buildAccountUsageRefreshKey(current) !== buildAccountUsageRefreshKey(next) ||
     buildGrokUsageRefreshKey(current) !== buildGrokUsageRefreshKey(next)
   )
@@ -2295,8 +2301,10 @@ const handleProbeUpstreamBilling = async (account: Account) => {
   }
 }
 const handleAccountUpdated = (updatedAccount: Account) => {
+  const hadNewAPIRate = accounts.value.some(account => account.id === updatedAccount.id && account.newapi_group_rate)
   patchAccountInList(updatedAccount)
   enterAutoRefreshSilentWindow()
+  if (hadNewAPIRate) void refreshUpstreamBillingRates(true)
 }
 const formatExportTimestamp = () => {
   const now = new Date()

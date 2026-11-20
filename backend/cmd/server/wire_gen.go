@@ -188,7 +188,10 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	channelMonitorV2Repository := repository.NewChannelMonitorV2Repository(db)
 	channelMonitorV2Service := service.ProvideChannelMonitorV2Service(channelMonitorV2Repository, settingService)
 	channelMonitorV2Handler := handler.NewChannelMonitorV2Handler(channelMonitorV2Service, apiKeyService)
-	upstreamPricingService := service.NewUpstreamPricingService(db, configConfig, secretEncryptor, usageLogRepository)
+	upstreamPricingService, err := service.NewUpstreamPricingService(db, configConfig, secretEncryptor, usageLogRepository)
+	if err != nil {
+		return nil, err
+	}
 	upstreamPricingHandler := admin.NewUpstreamPricingHandler(upstreamPricingService)
 	dashboardAggregationRepository := repository.NewDashboardAggregationRepository(db)
 	dashboardStatsCache := repository.NewDashboardCache(redisClient, configConfig)
