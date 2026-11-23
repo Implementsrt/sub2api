@@ -20,9 +20,9 @@
 - 将验证后的程序复制为 `local-runtime/sub2api.exe` 并启动。新程序自动执行其内嵌迁移；脚本核对健康状态、实际版本及迁移记录。
 - 新程序启动前失败，或没有待执行迁移时启动失败，可恢复旧程序。新程序可能已执行迁移时，不自动恢复旧程序或数据库；停止失败服务，保留备份和日志供恢复。数据库不会被脚本自动覆盖。
 
-没有新构建时，只重启已安装程序。`start-local.cmd` 保留普通启动语义，不切换版本。现有 `local-runtime/start.ps1 -RestartApp` 兼容入口转发到新版脚本。脚本不重启 Codex。
+没有新构建时，启动或重启已安装程序。普通启动和重启都会在 Redis 未运行时启动它，并等待 `PING` 返回 `PONG`，冷启动时也可以直接使用桌面快捷方式。依赖检查通过后，重启脚本才会停止现有 Sub2API 进程。`start-local.cmd` 保留普通启动语义，不切换版本。现有 `local-runtime/start.ps1 -RestartApp` 兼容入口转发到新版脚本。脚本不重启 Codex。
 
-当前本机工具默认位于 `D:\software\Python\Python313\python.exe` 和 `D:\software\PostgreSQL\18\bin`，Redis 路径沿用现有安装。迁移到另一台机器时需传入 `restart.ps1 -PythonExe ... -PgBin ...`，并调整 `start.ps1` 中的 Redis 路径。数据库 helper 只接受本机安装器生成的 database 标量配置；凭证只传入 PostgreSQL 子进程环境，不打印原始诊断。该流程面向本机单服务运行；不阻止外部程序直接写同一个数据库。
+当前本机工具默认位于 `D:\software\Python\Python313\python.exe` 和 `D:\software\PostgreSQL\18\bin`，Redis 路径沿用现有安装。迁移到另一台机器时需传入 `restart.ps1 -PythonExe ... -PgBin ...`，并调整 `dependencies.ps1` 中的 Redis 路径。数据库 helper 只接受本机安装器生成的 database 标量配置；凭证只传入 PostgreSQL 子进程环境，不打印原始诊断。该流程面向本机单服务运行；不阻止外部程序直接写同一个数据库。
 
 ## 验证，不重启
 
@@ -30,7 +30,7 @@
 
 发布脚本测试：从 `local-runtime/latest-build.json` 取得当前发布程序路径和版本，传给 `test-release.ps1 -Candidate ... -Version ...`。不要依赖可能已清理的旧版散落 exe。
 
-重启流程测试：使用当前发布路径及版本运行 `test-restart.ps1 -Candidate ... -Version ... -OldExecutable local-runtime/sub2api.exe`。使用模拟进程、网络和数据库验证升级成功、备份失败、无迁移启动失败回退、有迁移启动失败停止四种情况，不启动任何服务。
+重启流程测试：使用当前发布路径及版本运行 `test-restart.ps1 -Candidate ... -Version ... -OldExecutable local-runtime/sub2api.exe`。候选程序和旧程序需为不同构建。测试覆盖冷启动、仅检查模式、依赖启动失败、升级成功、备份失败和升级回退边界。`test-dependencies.ps1` 模拟 Redis 冷启动及端口开放后延迟就绪。两组测试均使用模拟服务。
 
 数据库 helper 测试：`python deploy/fork-local/test_database.py`。测试数据库命令使用模拟环境，不改动真实数据库。测试夹具保留于忽略的 `local-runtime/release-checks/`。上述测试命令中的候选程序及版本需随实际构建调整。
 

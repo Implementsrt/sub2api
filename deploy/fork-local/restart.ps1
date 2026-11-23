@@ -5,6 +5,7 @@ param(
     [switch]$Check
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'dependencies.ps1')
 $RuntimePath = [IO.Path]::GetFullPath($RuntimePath)
 $appExe = Join-Path $RuntimePath 'sub2api.exe'
 $pidFile = Join-Path $RuntimePath 'sub2api.pid'
@@ -70,6 +71,7 @@ try {
             throw 'Port 8080 belongs to an unmanaged process; refusing to change the service.'
         }
     }
+    if (!$Check) { Initialize-LocalDependencies }
     if ($needsUpgrade) {
         $snapshot = Read-Database 'inspect' ''
         $pendingMigrations = @($manifest.migrations | Where-Object { $_ -notin $snapshot.migrations })

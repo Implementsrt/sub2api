@@ -9,7 +9,14 @@ $testRoot = Join-Path $repoPath ("local-runtime\release-checks\" + [Guid]::NewGu
 New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'restart.ps1') -Destination $testRoot
 @'
+function Initialize-LocalDependencies {
+    if ($global:TestFailDependencies) { throw 'Simulated Redis startup failure' }
+    $global:TestDependenciesReady = $true
+}
+'@ | Set-Content -LiteralPath (Join-Path $testRoot 'dependencies.ps1') -Encoding UTF8
+@'
 param([string]$RuntimePath)
+if (!$global:TestDependenciesReady) { throw 'Startup proceeded before Redis was ready' }
 $global:TestStartCount++
 if ($global:TestFailStart -and $global:TestStartCount -eq 1) { throw 'Simulated startup failure' }
 $global:TestRunning = $true
@@ -37,6 +44,7 @@ function Invoke-RestMethod {
 function Invoke-TestDatabase {
     $action = $args[1]
     $global:LASTEXITCODE = 0
+    if (!$global:TestDependenciesReady -and !$global:TestCheckOnly) { throw 'Database preflight ran before Redis was ready' }
     if ($action -eq 'backup') {
         if ($global:TestFailBackup) { $global:LASTEXITCODE = 1; return }
         $directory = $args[-1]
@@ -47,10 +55,13 @@ function Invoke-TestDatabase {
     @{ migrations = @($all) } | ConvertTo-Json -Depth 3 -Compress
 }
 
-foreach ($scenario in @('success', 'backup-failure', 'startup-failure-no-migration', 'startup-failure-with-migration')) {
+foreach ($scenario in @('success', 'cold-start', 'check-only', 'dependency-failure', 'backup-failure', 'startup-failure-no-migration', 'startup-failure-with-migration')) {
     $global:TestRuntime = Join-Path $testRoot $scenario
     $global:TestStartCount = 0
-    $global:TestRunning = $true
+    $global:TestRunning = $scenario -ne 'cold-start'
+    $global:TestCheckOnly = $scenario -eq 'check-only'
+    $global:TestDependenciesReady = $false
+    $global:TestFailDependencies = $scenario -in @('check-only', 'dependency-failure')
     $global:TestFailBackup = $scenario -eq 'backup-failure'
     $global:TestFailStart = $scenario -like 'startup-failure*'
     $global:TestHasMigration = $scenario -ne 'startup-failure-no-migration'
@@ -60,13 +71,19 @@ foreach ($scenario in @('success', 'backup-failure', 'startup-failure-no-migrati
     New-Item -ItemType Directory -Path (Join-Path $global:TestRuntime 'data') | Out-Null
     Copy-Item -LiteralPath $OldExecutable -Destination (Join-Path $global:TestRuntime 'sub2api.exe')
     '424242' | Set-Content -LiteralPath (Join-Path $global:TestRuntime 'sub2api.pid')
+    $shouldFail = $scenario -notin @('success', 'cold-start', 'check-only')
     $failed = $false
-    try { & (Join-Path $testRoot 'restart.ps1') -RuntimePath $global:TestRuntime -PythonExe Invoke-TestDatabase }
-    catch { $failed = $true; if ($scenario -eq 'success') { throw } }
-    if ($failed -ne ($scenario -ne 'success')) { throw "Unexpected result: $scenario" }
+    try { & (Join-Path $testRoot 'restart.ps1') -RuntimePath $global:TestRuntime -PythonExe Invoke-TestDatabase -Check:$global:TestCheckOnly }
+    catch { $failed = $true; if (!$shouldFail) { throw } }
+    if ($failed -ne $shouldFail) { throw "Unexpected result: $scenario" }
     $installedHash = (Get-FileHash -LiteralPath (Join-Path $global:TestRuntime 'sub2api.exe')).Hash
     $oldHash = (Get-FileHash -LiteralPath $OldExecutable).Hash
-    if ($scenario -in @('backup-failure', 'startup-failure-no-migration')) {
+    if ($scenario -in @('check-only', 'dependency-failure')) {
+        if (!$global:TestRunning -or $global:TestStartCount -ne 0 -or $installedHash -ne $oldHash -or
+            (Test-Path -LiteralPath (Join-Path $global:TestRuntime 'backups'))) {
+            throw "Preflight modified the running installation: $scenario"
+        }
+    } elseif ($scenario -in @('backup-failure', 'startup-failure-no-migration')) {
         if (!$global:TestRunning -or $installedHash -ne $oldHash) { throw "Old service was not restored: $scenario" }
     } elseif ($scenario -eq 'startup-failure-with-migration') {
         if ($global:TestRunning -or $installedHash -ne $manifest.sha256) { throw 'Migration failure performed an unsafe rollback.' }
